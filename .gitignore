@@ -1,0 +1,10 @@
+bin/
+obj/
+out/
+install/
+AppPackages/
+BundleArtifacts/
+*.pfx
+*.user
+.vs/
+PowderPulse/web/three.min.js
