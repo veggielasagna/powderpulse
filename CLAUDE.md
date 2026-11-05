@@ -15,7 +15,8 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 
 ## Game structure (index.html)
 - Modes: `run` (roguelite), `free` (endless mountains), `skate` (endless snowskate street spots). `isFree()` is true for free and skate.
-- Terrain: `groundH` = slope + noise + side walls + kickers (16 m buckets in `c.kb`) − drops (cliffs, pitches, stair sets; prefix sums in `c.drops`, built by `indexCourse`). `groundFast` reads the height grid sampled for the terrain mesh (particles, tracks). Snowskate rails are polylines `{kind, x, w, h, pts:[{z,y}]}` read with `railAt`.
+- Terrain: `groundH` = slope + noise + side walls + kickers (16 m buckets in `c.kb`) − drops (cliffs, pitches, stair sets; prefix sums in `c.drops`, built by `indexCourse`). `groundFast` reads the height grid sampled for the terrain mesh (particles, tracks). Snowskate rails are polylines `{kind, x, w, h, pts:[{z,y}]}` read with `railAt`. Street gaps (`c.gaps`) are a kicked plaza edge over snow-capped planters (`c.blocks`, crash if hit low); every gap clears with an ollie at 9–13 m/s.
+- Camera: always directly behind the rider (the owner asked for no side swings or filmer angles).
 - Controls: X/B/LB/RB are one set of trick buttons: snowboard grabs (Indy/Method/Tail/Nose) in the air, LB/RB presses and butters on the snow; snowskate flips (Kickflip/Heelflip/Shove-it/Tre). Stick up/down = flips (snowboard air) or manuals (snowskate ground).
 - Performance: adaptive resolution (`adaptResolution`), crystals updated only near the rider (`flakeWindow`), audio automation only when a target moves (`Music.set`).
 
