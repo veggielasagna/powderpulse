@@ -75,6 +75,7 @@ namespace PowderPulse
             // B is a grab button in the game, so never let it navigate the app away.
             SystemNavigationManager.GetForCurrentView().BackRequested += (s, e) => e.Handled = true;
             Loaded += async (s, e) => await StartWeb();
+            Window.Current.Activated += OnWindowActivated;
         }
 
         // ------------------------------------------------------------ WebView2
@@ -103,7 +104,7 @@ namespace PowderPulse
                 core.AddWebResourceRequestedFilter(MusicHost + "*", CoreWebView2WebResourceContext.All);
                 core.WebResourceRequested += OnSongRequested;
                 core.WebMessageReceived += OnWebMessage;
-                core.ProcessFailed += (s, e) => Log.Write("WebView2 process failed: " + e.ProcessFailedKind);
+                core.ProcessFailed += OnProcessFailed;
                 core.NavigationCompleted += (s, e) =>
                 {
                     Log.Write("Game loaded: " + e.IsSuccess + (e.IsSuccess ? "" : " " + e.WebErrorStatus));
@@ -150,9 +151,37 @@ namespace PowderPulse
 
         // ------------------------------------------------------------ Controller: sent to the page whenever it changes
 
+        // If the page's engine dies (usually low memory), reload the game rather than leave a blank screen.
+        // At most once a minute, so a page that keeps failing doesn't loop.
+        private DateTime lastReload = DateTime.MinValue;
+        private void OnProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs e)
+        {
+            Log.Write("WebView2 process failed: " + e.ProcessFailedKind);
+            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited) return;
+            if ((DateTime.UtcNow - lastReload).TotalSeconds < 60) return;
+            lastReload = DateTime.UtcNow;
+            try { sender.Navigate("https://" + AppHost + "/index.html?recovered=1"); Log.Write("Reloaded the game after a failure"); }
+            catch (Exception ex) { Log.Write("Reload failed: " + ex.Message); }
+        }
+
+        // The Xbox guide (or another app) covering the game: tell the page so it pauses, and stop sending
+        // the controller so presses meant for the guide don't steer the rider (a lesson from WMC SX).
+        private bool appActive = true;
+        private void OnWindowActivated(object sender, WindowActivatedEventArgs e)
+        {
+            bool active = e.WindowActivationState != CoreWindowActivationState.Deactivated;
+            if (active == appActive) return;
+            appActive = active;
+            lastPad = "";
+            var o = new JsonObject();
+            o["type"] = JsonValue.CreateStringValue("active");
+            o["on"] = JsonValue.CreateBooleanValue(active);
+            Post(o);
+        }
+
         private void PollPad(object sender, object e)
         {
-            if (web == null || web.CoreWebView2 == null) return;
+            if (web == null || web.CoreWebView2 == null || !appActive) return;
             var pads = Gamepad.Gamepads;
             if (pads.Count == 0) return;
             var r = pads[0].GetCurrentReading();

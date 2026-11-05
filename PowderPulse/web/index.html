@@ -30,7 +30,7 @@ body{touch-action:none;user-select:none;-webkit-user-select:none}
 canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block}
 
 /* HUD: small, low-contrast, out of the way */
-.hud{position:fixed;inset:0;pointer-events:none;font-variant-numeric:tabular-nums}
+.hud{position:fixed;inset:0;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px rgba(15,18,34,.55),0 0 12px rgba(15,18,34,.35)}
 .hud .tl,.hud .tr,.hud .bl,.hud .br{position:absolute;display:flex;flex-direction:column;gap:6px}
 .hud .tl{top:calc(18px + env(safe-area-inset-top,0px));left:calc(22px + env(safe-area-inset-left,0px))}
 .hud .tr{top:calc(18px + env(safe-area-inset-top,0px));right:calc(22px + env(safe-area-inset-right,0px));align-items:flex-end}
@@ -58,13 +58,13 @@ canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block}
 .score{font-size:26px;font-weight:500;letter-spacing:.04em}
 .combo{font-size:12px;font-weight:600;letter-spacing:.18em;color:var(--amber)}
 .gauges{display:flex;gap:22px}
-.gauge small{display:block;font-size:10px;letter-spacing:.2em;color:var(--dim);font-weight:600}
+.gauge small{display:block;font-size:10px;letter-spacing:.2em;color:var(--snow);opacity:.75;font-weight:600}
 .gauge small:last-child{display:none}
 .gauge b{font-size:20px;font-weight:500}
 .progress{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(30vw,260px);height:2px;background:var(--line);overflow:hidden;pointer-events:none}
 .progress i{display:block;height:100%;width:0;background:var(--snow);opacity:.7}
 .music{width:min(240px,46vw);text-align:right}
-.music .np{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.music .np{font-size:12px;color:var(--snow);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .music .np b{color:var(--snow);font-weight:500}
 .eq{display:flex;align-items:flex-end;justify-content:flex-end;gap:3px;height:14px;margin-top:6px}
 .eq i{width:3px;border-radius:2px;height:10%;background:var(--teal);opacity:.75}
@@ -1266,7 +1266,7 @@ const tracks = (() => {
   const N = 320, pts = [], geo = new THREE.BufferGeometry(), pos = new Float32Array(N*2*3), idx = [];
   for(let i=0;i<N-1;i++){ const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); }
   geo.setIndex(idx); geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:0xb1b9db, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:0xc2c8e2, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }));
   mesh.frustumCulled = false; scene.add(mesh);
   let last = null, dirty = false;
   function rebuild(){
@@ -1284,7 +1284,7 @@ const tracks = (() => {
       const on = P.grounded && state === 'ride';
       if(!last || Math.hypot(P.x-last.x, P.z-last.z) > 0.7 || (!on && last.w)){
         const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
-        const w = on ? (isSkate() ? 0.09 : 0.2) + Math.abs(input.turn)*(isSkate() ? 0.05 : 0.14) : 0;
+        const w = on ? (isSkate() ? 0.08 : 0.11) + Math.abs(input.turn)*0.06 : 0;
         const p = { x:P.x, y:groundFast(P.x,P.z)+0.03, z:P.z, w, nx:fz, nz:-fx };
         if(on && last && !last.w) pts.push(Object.assign({}, p, { w:0 }));   // start a new stretch cleanly after a jump
         pts.push(p); if(pts.length > N) pts.splice(0, pts.length - N);
@@ -1560,6 +1560,7 @@ if(bridge){
     let m = e.data; if(typeof m === 'string'){ try{ m = JSON.parse(m); }catch(_){ return; } }
     if(!m) return;
     if(m.type === 'pad'){ nativePad = m; nativePad.t = performance.now(); return; }
+    if(m.type === 'active'){ if(!m.on){ nativePad = null; keys.clear(); if(state === 'ride') togglePause(); } return; }
     if(m.type === 'music.status'){ setStatus(m.text || ''); return; }
     if(m.type === 'music.library' && Array.isArray(m.songs)){
       if(m.part === 0) Lib.incoming = [];

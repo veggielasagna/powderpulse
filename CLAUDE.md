@@ -21,6 +21,9 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 - Memory: per-course outline shapes (`hullGeo` while `buildingCourse`) and instanced tree/rock/gem shapes are freed when the next course is built.
 - Browser check: `.github/workflows/browser-check.yml` runs `tests/browser-check.mjs` in headless Chromium with the real three.js on every push that touches the game. It presses Drop In, Free Ride and Snowskate (phone and TV sizes), fails on page errors or a stalled rider, and force-pushes screenshots plus the report to the `ci-shots` branch (`git clone -b ci-shots` to look at them). Use it; a stand-in for three.js missed the frozen-render bug below.
 - Never build an InstancedMesh with zero instances or without per-instance colors when its material was used with colors before: three.js r128 reuses the colored shader and throws in `renderBufferDirect` every frame (Free Ride and Snowskate froze on 2026-11-04). With no crystals the crystal layer is simply not built.
+- Tricky mode: `Tricky` (meter fills on every clean `scoreTrick`, 6 needed; LT = gamepad button 6, T, or tap the HUD meter; 10 s of ×1.35 speed and ×1.55 spin/flip). The Options screen (`scrOptions`) turns it off (`localStorage pp_tricky`). The browser check covers both.
+- Xbox app: posts `{type:'active', on}` when the guide or another app covers the game (the page pauses, the controller isn't sent while inactive), and reloads `index.html?recovered=1` if the page's engine dies (once a minute at most).
+- Font: the Xbox build downloads Chakra Petch into `web/fonts` and swaps the Google Fonts link for `fonts.css`, so it looks right offline (falls back to the online link if that step fails).
 - Errors show as a small on-screen note and go to the Xbox log (`reportError`).
 - Camera: always directly behind the rider (the owner asked for no side swings or filmer angles).
 - Controls: X/B/LB/RB are one set of trick buttons: snowboard grabs (Indy/Method/Tail/Nose) in the air, LB/RB presses and butters on the snow; snowskate flips (Kickflip/Heelflip/Shove-it/Tre). Stick up/down = flips (snowboard air) or manuals (snowskate ground).
@@ -30,4 +33,4 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 Push to `main` → `.github/workflows/build.yml` on windows-2022 → artifact `Powder-Pulse-1.0.<run>.0-install` (sideload .msix + dependency .appx files + HOW-TO-INSTALL.txt). Same pipeline as WMC SX. Nothing compiles locally; CI is the compile check.
 
 ## Next
-- Bundle the Google fonts so the game looks right offline.
+- Nothing queued.

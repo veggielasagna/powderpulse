@@ -34,6 +34,30 @@ jobs:
           if ($size -lt 500000) { throw "three.min.js looks wrong ($size bytes)" }
           Write-Host "three.min.js $size bytes"
 
+      - name: Bundle the font so the game looks right offline
+        shell: pwsh
+        run: |
+          try {
+            $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            $css = (Invoke-WebRequest -UseBasicParsing -UserAgent $ua -Uri "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&display=swap").Content
+            New-Item -ItemType Directory -Force -Path "PowderPulse\web\fonts" | Out-Null
+            $i = 0
+            foreach ($m in [regex]::Matches($css, 'url\((https://[^)]+?\.woff2)\)')) {
+              $u = $m.Groups[1].Value; $name = "chakra-$i.woff2"
+              Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile "PowderPulse\web\fonts\$name"
+              $css = $css.Replace($u, "fonts/$name"); $i++
+            }
+            if ($i -eq 0) { throw "no font files in the stylesheet" }
+            Set-Content -Path "PowderPulse\web\fonts.css" -Value $css -Encoding utf8
+            $page = Get-Content "PowderPulse\web\index.html" -Raw
+            $page = $page -replace '<link rel="preconnect" href="https://fonts.googleapis.com">\s*', ''
+            $page = $page -replace '<link rel="stylesheet" href="https://fonts.googleapis.com/css2[^"]*">', '<link rel="stylesheet" href="fonts.css">'
+            Set-Content -Path "PowderPulse\web\index.html" -Value $page -Encoding utf8 -NoNewline
+            Write-Host "Bundled $i font files"
+          } catch {
+            Write-Host "Couldn't bundle the font ($_); the game will load it online instead"
+          }
+
       - name: Stamp the version number
         shell: pwsh
         run: |
