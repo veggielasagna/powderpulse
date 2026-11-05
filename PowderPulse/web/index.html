@@ -59,6 +59,7 @@ canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block}
 .balance{position:fixed;left:50%;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(220px,50vw);height:4px;border-radius:2px;background:var(--line);pointer-events:none}
 .balance::before{content:"";position:absolute;left:35%;right:35%;top:0;bottom:0;background:rgba(159,207,176,.35);border-radius:2px}
 .balance i{position:absolute;top:-4px;width:4px;height:12px;margin-left:-2px;border-radius:2px;background:var(--snow);left:50%}
+.errnote{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:min(92vw,640px);background:var(--glass);border:1px solid var(--rose);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--snow);z-index:20;pointer-events:none;overflow-wrap:anywhere}
 .popup{position:fixed;left:50%;top:26%;transform:translate(-50%,-50%) translateY(6px);text-align:center;pointer-events:none;opacity:0;transition:opacity .35s,transform .35s}
 .popup.show{opacity:1;transform:translate(-50%,-50%)}
 .popup .t{font-size:clamp(22px,3.6vw,38px);font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--snow);text-shadow:0 2px 18px rgba(15,18,34,.6);text-wrap:balance}
@@ -151,6 +152,7 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
   </div>
 </div>
 <div class="balance" id="balance" hidden><i id="balMark"></i></div>
+<div class="errnote" id="errNote" hidden></div>
 <div class="popup" id="popup"><div class="t" id="popT"></div><div class="s" id="popS"></div></div>
 
 <div class="touch" id="touch" hidden>
@@ -266,6 +268,16 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
 <script>
 (async () => {
 "use strict";
+// Any error shows as a small note (and goes to the Xbox log), so a problem never looks like a frozen screen.
+let lastErr = '';
+function reportError(msg){
+  msg = String(msg || 'Unknown error').split('\n')[0].slice(0, 220);
+  if(msg === lastErr) return; lastErr = msg;
+  try{ const n = document.getElementById('errNote'); n.textContent = 'Something went wrong: ' + msg; n.hidden = false; }catch(e){}
+  try{ if(window.chrome && window.chrome.webview) window.chrome.webview.postMessage(JSON.stringify({ type:'log', text:'ERROR ' + msg })); }catch(e){}
+}
+window.addEventListener('error', e => reportError(e.error ? (e.error.message || e.error) : e.message));
+window.addEventListener('unhandledrejection', e => reportError(e.reason && (e.reason.message || e.reason)));
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 const lerp = (a,b,t) => a + (b-a)*t;
@@ -891,13 +903,18 @@ function buildCourseMeshes(){
     }
   }
 
-  // Crystals in rotating neon colors
-  const fg = new THREE.OctahedronGeometry(0.6);
-  flakeMesh = new THREE.InstancedMesh(fg, flakeMat, c.flakes.length);
-  flakeOutline = new THREE.InstancedMesh(hullGeo(fg, 0.14), inkMat, c.flakes.length);
-  const fcols = [0xd98aa0, 0x8fc9d8, 0xe6c27a, 0x9fcfb0];
-  c.flakes.forEach((f,i) => { flakeMesh.setColorAt(i, tmpC.set(fcols[i%4])); setFlake(i, f, 0, 1); });
-  courseGroup.add(flakeMesh, flakeOutline);
+  // Crystals in soft colors. With no crystals (Free Ride, Snowskate) the layer isn't built at all:
+  // an empty instanced layer has no per-crystal colors, and three.js r128 would reuse the colored
+  // shader from an earlier course and fail on every frame (that froze both modes on 2026-11-04).
+  flakeMesh = flakeOutline = null;
+  if(c.flakes.length){
+    const fg = new THREE.OctahedronGeometry(0.6);
+    flakeMesh = new THREE.InstancedMesh(fg, flakeMat, c.flakes.length);
+    flakeOutline = new THREE.InstancedMesh(hullGeo(fg, 0.14), inkMat, c.flakes.length);
+    const fcols = [0xd98aa0, 0x8fc9d8, 0xe6c27a, 0x9fcfb0];
+    c.flakes.forEach((f,i) => { flakeMesh.setColorAt(i, tmpC.set(fcols[i%4])); setFlake(i, f, 0, 1); });
+    courseGroup.add(flakeMesh, flakeOutline);
+  }
 
   // Finish arch
   const gy = groundH(0, c.L);
