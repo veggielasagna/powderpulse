@@ -84,7 +84,7 @@ namespace PowderPulse
             try
             {
                 Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required");
-                Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF1B1030");
+                Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF10131F");
 
                 web = new WebView2();
                 web.HorizontalAlignment = HorizontalAlignment.Stretch;
