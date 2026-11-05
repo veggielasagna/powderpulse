@@ -1618,7 +1618,7 @@ const Lib = { songs:[], source:'', tab:'songs', drill:null, groups:{}, incoming:
 const Playlist = {
   list: [], keys: new Set(),
   load(){ try{ this.list = JSON.parse(store('pp_playlist') || '[]') || []; }catch(e){ this.list = []; } this.keys = new Set(this.list.map(s => s.k)); },
-  save(){ store('pp_playlist', JSON.stringify(this.list.filter(s => !s.src))); $('plCount').textContent = this.list.length; },
+  save(){ store('pp_playlist', JSON.stringify(this.list.filter(s => !s.src), (k, v) => k === '_q' ? undefined : v)); $('plCount').textContent = this.list.length; },
   has(s){ return this.keys.has(s.k); },
   toggle(s){ if(this.has(s)){ this.list = this.list.filter(x => x.k !== s.k); this.keys.delete(s.k); } else { this.list.push(s); this.keys.add(s.k); } this.save(); },
   addAll(arr){ for(const s of arr) if(!this.has(s)){ this.list.push(s); this.keys.add(s.k); } this.save(); },
@@ -1636,8 +1636,12 @@ const toTrack = s => ({ title: songTitle(s), url: songUrl(s), key: s.k });
 function shuffled(arr){ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function hostLog(t){ try{ if(bridge) bridge.postMessage(JSON.stringify({ type:'log', text:String(t) })); }catch(e){} }
 
+// One shared collator: calling localeCompare with options sets up a new collator on every
+// comparison, which took seconds to sort a 40,000-song library.
+const COLLATE = new Intl.Collator(undefined, { sensitivity:'base', numeric:true });
 function setLibrary(songs, source){
-  const cmp = (x,y) => (x||'').localeCompare(y||'', undefined, { sensitivity:'base' });
+  const cmp = (x,y) => COLLATE.compare(x||'', y||'');
+  for(const s of songs) s._q = (s.t+' '+(s.a||'')+' '+(s.l||'')+' '+(s.g||'')+' '+(s.y||'')).toLowerCase();   // search text, built once
   songs.sort((p,q) => cmp(p.a,q.a) || cmp(p.l,q.l) || ((p.n||0)-(q.n||0)) || cmp(p.t,q.t));
   Lib.songs = songs; Lib.source = source; Lib.groups = {}; Lib.drill = null;
   // playlist entries saved earlier pick up the current address (USB indexes change between sessions)
@@ -1664,7 +1668,7 @@ function groupsFor(tab){
   for(const s of Lib.songs){ const k = s[field] || unknown; if(!m.has(k)) m.set(k, []); m.get(k).push(s); }
   let arr = [...m.entries()].map(([name, songs]) => ({ name, songs, sub: tab==='albums' ? (songs[0].a || '') : '' }));
   if(tab === 'years') arr.sort((p,q) => (p.name === unknown) - (q.name === unknown) || (q.name > p.name) - (q.name < p.name));
-  else arr.sort((p,q) => p.name.localeCompare(q.name, undefined, { sensitivity:'base' }));
+  else arr.sort((p,q) => COLLATE.compare(p.name, q.name));
   return Lib.groups[tab] = arr;
 }
 const LIB_LIMIT = 150;
@@ -1673,7 +1677,7 @@ function renderLib(){
   const q = $('libSearch').value.trim().toLowerCase();
   const tab = Lib.tab;
   document.querySelectorAll('#libTabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  const hit = s => !q || (s.t+' '+(s.a||'')+' '+(s.l||'')+' '+(s.g||'')+' '+(s.y||'')).toLowerCase().includes(q);
+  const hit = s => !q || (s._q || (s._q = (s.t+' '+(s.a||'')+' '+(s.l||'')+' '+(s.g||'')+' '+(s.y||'')).toLowerCase())).includes(q);
   let songs = null, groups = null, actions = [];
   if(Lib.drill){ songs = Lib.drill.songs.filter(hit); }
   else if(tab === 'songs') songs = Lib.songs.filter(hit);
