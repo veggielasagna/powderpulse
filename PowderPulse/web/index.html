@@ -596,12 +596,14 @@ function toonMat(color, shade, o={}){
 const inkMat = new THREE.MeshBasicMaterial({ color:INK, side:THREE.BackSide });
 const inkMatNoFog = new THREE.MeshBasicMaterial({ color:INK, side:THREE.BackSide, fog:false });
 const hullCache = new Map();
+let buildingCourse = false;
 function hullGeo(geo, t){
   const key = geo.uuid + t; if(hullCache.has(key)) return hullCache.get(key);
   const g = geo.clone(); g.computeBoundingBox();
   const b = g.boundingBox, c = new THREE.Vector3(), s = new THREE.Vector3(); b.getCenter(c); b.getSize(s);
   const p = g.attributes.position, fx = 1+2*t/Math.max(s.x,0.01), fy = 1+2*t/Math.max(s.y,0.01), fz = 1+2*t/Math.max(s.z,0.01);
   for(let i=0;i<p.count;i++) p.setXYZ(i, c.x+(p.getX(i)-c.x)*fx, c.y+(p.getY(i)-c.y)*fy, c.z+(p.getZ(i)-c.z)*fz);
+  if(buildingCourse) g.userData.course = true;
   hullCache.set(key, g); return g;
 }
 function outlined(geo, mat, t=0.045, ink=inkMat){
@@ -664,6 +666,7 @@ const backdrop = new THREE.Group(); scene.add(backdrop);
   g.fillStyle = '#efe4d8'; g.beginPath(); g.arc(128,128,40,0,TAU); g.fill();
   const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(cv), fog:false, depthWrite:false, transparent:true }));
   moon.scale.setScalar(110); moon.position.copy(LIGHT).multiplyScalar(620); backdrop.add(moon);
+  mergeStatic(backdrop);
 }
 
 /* ---------- Course meshes ---------- */
@@ -744,17 +747,65 @@ function buildSkateProps(c){
     const uv = fg.attributes.uv; for(let i=0;i<uv.count;i++) uv.setXY(i, uv.getX(i)*(bd.w-1)/7, uv.getY(i)*(bd.h-3)/7);
     const f = addOwn(courseGroup, new THREE.Mesh(fg, facadeMats[bd.lit])); f.position.set(fx - bd.side*0.02, gy + 2 + 1 + (bd.h-3)/2 + 0.6, bd.z); f.rotation.y = -bd.side*Math.PI/2;
   }
-  // street lamps with a warm glow
+  // street lamps with a warm glow; all the glows are one point cloud (one draw instead of one per lamp)
+  const glowPos = [];
   for(const l of c.lamps){
     const gy = groundH(l.x, l.z);
     const pole = new THREE.Mesh(LAMP_POLE, lampMat); pole.position.set(l.x, gy + 2.3, l.z); courseGroup.add(pole);
     const head = new THREE.Mesh(LAMP_HEAD, lampMat); head.position.set(l.x, gy + 4.6, l.z); courseGroup.add(head);
-    const glow = new THREE.Sprite(lampGlowMat); glow.scale.setScalar(3.4); glow.position.set(l.x, gy + 4.35, l.z); courseGroup.add(glow);
+    glowPos.push(l.x, gy + 4.35, l.z);
+  }
+  if(glowPos.length){
+    const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(glowPos, 3));
+    const glows = addOwn(courseGroup, new THREE.Points(gg, lampGlowPts)); glows.frustumCulled = false;
   }
 }
+const lampGlowPts = new THREE.PointsMaterial({ map: lampGlowMat.map, size: 3.4, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true });
+
+/* Everything on a course that never moves is merged into one shape per material, so the graphics chip
+   gets a few dozen draws instead of a thousand. Streets with rails, posts, ledges and buildings need this
+   on phones. Instanced trees, crystals, point clouds and the big terrain stay as they are. */
+function mergeStatic(group){
+  const _m4 = new THREE.Matrix4();
+  group.updateMatrixWorld(true);
+  const buckets = new Map(), consumed = [];
+  group.traverse(o => {
+    if(o === group || !o.isMesh || o.isInstancedMesh || o.isPoints || o.isSprite) return;
+    const pos = o.geometry && o.geometry.attributes.position;
+    if(!pos || pos.count > 20000 || Array.isArray(o.material)) return;
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    g.applyMatrix4(_m4.copy(group.matrixWorld).invert().multiply(o.matrixWorld));
+    if(!buckets.has(o.material)) buckets.set(o.material, []);
+    buckets.get(o.material).push(g);
+    consumed.push(o);
+  });
+  for(const o of consumed){ if(o.userData.own && o.geometry) o.geometry.dispose(); o.parent.remove(o); }
+  // groups left empty after their meshes were pulled out
+  group.children.filter(ch => !ch.isMesh && !ch.isPoints && ch.children.length === 0).forEach(ch => group.remove(ch));
+  for(const [mat, geos] of buckets){
+    let n = 0; for(const g of geos) n += g.attributes.position.count;
+    const pos = new Float32Array(n*3), nor = new Float32Array(n*3), uv = mat.map ? new Float32Array(n*2) : null;
+    let at = 0;
+    for(const g of geos){
+      pos.set(g.attributes.position.array, at*3);
+      if(g.attributes.normal) nor.set(g.attributes.normal.array, at*3);
+      if(uv && g.attributes.uv) uv.set(g.attributes.uv.array, at*2);
+      at += g.attributes.position.count; g.dispose();
+    }
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    mg.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    if(uv) mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    mg.computeBoundingSphere();
+    addOwn(group, new THREE.Mesh(mg, mat));
+  }
+}
+const lipInkMat = new THREE.MeshBasicMaterial({ color:INK });
 const POST_SM = new THREE.CylinderGeometry(0.22, 0.22, 7.2, 8), POST_LG = new THREE.CylinderGeometry(0.4, 0.4, 10, 8);
 function buildCourseMeshes(){
   if(courseGroup) disposeCourse(courseGroup);
+  for(const [k, g] of hullCache) if(g.userData.course){ g.dispose(); hullCache.delete(k); }
+  buildingCourse = true;
   courseGroup = new THREE.Group(); scene.add(courseGroup);
   const c = course;
   // Terrain with painted kickers and warning stripes
@@ -805,7 +856,7 @@ function buildCourseMeshes(){
       const p = new THREE.Mesh(postG, poleMat); p.position.set(px, gy0+top/2, zb); courseGroup.add(p);
       const f = new THREE.Mesh(flagGeo, mat); f.position.set(px, gy0+top, zb); f.rotation.y = sx > 0 ? Math.PI : 0; f.scale.setScalar(k.mega ? 1.5 : 1); courseGroup.add(f);
     }
-    const lip = addOwn(courseGroup, new THREE.Mesh(new THREE.BoxGeometry(k.w*2-1, 0.1, 0.22), new THREE.MeshBasicMaterial({color:INK})));
+    const lip = addOwn(courseGroup, new THREE.Mesh(new THREE.BoxGeometry(k.w*2-1, 0.1, 0.22), lipInkMat));
     lip.position.set(k.x, groundH(k.x, k.z+k.len-0.05)+0.06, k.z+k.len-0.05);
   });
 
@@ -853,6 +904,9 @@ function buildCourseMeshes(){
   const archPole = new THREE.CylinderGeometry(0.3,0.3,11,8);
   for(const sx of [-15,15]){ const p = new THREE.Mesh(archPole, poleMat); p.position.set(sx, gy+5.5, c.L); courseGroup.add(p); }
   const fb = addOwn(courseGroup, new THREE.Mesh(new THREE.PlaneGeometry(30, 4.7), finishMat)); fb.position.set(0, gy+10, c.L); fb.rotation.y = Math.PI;
+  mergeStatic(courseGroup);
+  for(const ch of courseGroup.children) if(ch.isInstancedMesh) ch.userData.own = true;
+  buildingCourse = false;
 }
 
 /* ---------- Rider: jointed rig (original design: puffer, beanie, scarf, chunky boots) ---------- */
