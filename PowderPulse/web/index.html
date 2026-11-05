@@ -1236,7 +1236,7 @@ const tracks = (() => {
   const N = 320, pts = [], geo = new THREE.BufferGeometry(), pos = new Float32Array(N*2*3), idx = [];
   for(let i=0;i<N-1;i++){ const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); }
   geo.setIndex(idx); geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:0x8a93c2, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:0xb1b9db, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }));
   mesh.frustumCulled = false; scene.add(mesh);
   let last = null, dirty = false;
   function rebuild(){
@@ -1254,7 +1254,7 @@ const tracks = (() => {
       const on = P.grounded && state === 'ride';
       if(!last || Math.hypot(P.x-last.x, P.z-last.z) > 0.7 || (!on && last.w)){
         const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
-        const w = on ? 0.2 + Math.abs(input.turn)*0.14 : 0;
+        const w = on ? (isSkate() ? 0.09 : 0.2) + Math.abs(input.turn)*(isSkate() ? 0.05 : 0.14) : 0;
         const p = { x:P.x, y:groundFast(P.x,P.z)+0.03, z:P.z, w, nx:fz, nz:-fx };
         if(on && last && !last.w) pts.push(Object.assign({}, p, { w:0 }));   // start a new stretch cleanly after a jump
         pts.push(p); if(pts.length > N) pts.splice(0, pts.length - N);
