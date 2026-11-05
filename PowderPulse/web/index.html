@@ -94,6 +94,25 @@ input[type=text]{font-family:var(--body);font-size:15px;background:var(--snow);c
 .card.focus .nm,.card:focus-visible .nm,.card.focus .ds,.card:focus-visible .ds{color:var(--snow)}
 .tracks{font-size:12px;color:var(--ink);max-height:110px;overflow:auto;background:#efe6ff;border:2px solid var(--ink);border-radius:3px;padding:8px 10px;font-weight:500}
 .status{font-size:13px;color:var(--magenta);min-height:1.2em;font-weight:700}
+.panel.lib{max-width:940px;height:min(92vh,980px);gap:10px}
+.libhead{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px}
+.queue{font-size:13px;font-weight:700;color:var(--ink);background:var(--yellow);border:2px solid var(--ink);padding:2px 10px;transform:skewX(-8deg);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tabs button{font-size:13px;padding:7px 12px;background:var(--snow)}
+.tabs button.on{background:var(--ink);color:var(--yellow)}
+.tabs button.on.focus,.tabs button.on:focus-visible{background:var(--magenta);color:var(--snow)}
+.crumb{font-family:var(--graf);font-size:24px;line-height:1;color:var(--ink);min-height:0}
+.crumb:empty{display:none}
+.liblist{flex:1;min-height:120px;overflow:auto;display:flex;flex-direction:column;gap:6px;padding:4px 10px 8px 4px;background:#efe6ff;border:2px solid var(--ink);border-radius:3px}
+.lrow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;text-align:left;padding:7px 12px;font-weight:600;font-size:14px;letter-spacing:0;transform:skewX(-4deg);background:var(--snow);box-shadow:3px 3px 0 var(--ink)}
+.lrow .lt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lrow .ls{grid-column:1;font-size:12px;font-weight:500;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lrow .lm{grid-row:1/span 2;grid-column:2;font-family:var(--num);font-size:11px;font-weight:400;padding:3px 8px;border:2px solid var(--ink);background:var(--cyan)}
+.lrow.added{background:var(--lime)}
+.lrow.added .lm{background:var(--ink);color:var(--lime)}
+.lrow.focus .ls,.lrow:focus-visible .ls{color:var(--snow)}
+.lrow.note{background:transparent;box-shadow:none;border-style:dashed;font-weight:500;color:var(--ink-2)}
+.panel.lib .keys{margin-top:-2px}
 .tape{position:absolute;top:-14px;left:50%;width:110px;height:26px;background:rgba(255,225,74,.85);transform:translateX(-50%) rotate(3deg);border:2px solid rgba(27,16,48,.25)}
 
 /* Touch */
@@ -168,24 +187,34 @@ input[type=text]{font-family:var(--body);font-size:15px;background:var(--snow);c
 
 <!-- Music -->
 <div class="screen" id="scrMusic" hidden>
-  <div class="panel">
+  <div class="panel lib">
     <div class="tape"></div>
-    <h2>Your music</h2>
-    <p id="musicNote">Pick songs from a USB drive or anywhere on this device. The game plays them itself, so it can reshape them as you ride.</p>
-    <div class="row">
-      <button id="btnDemo">DEMO TRACK</button>
+    <div class="libhead"><h2>Your music</h2><div class="queue" id="queueLbl">Up next: demo track</div></div>
+    <p id="musicNote">Pick songs from a USB drive or this device. The game plays them itself, so it can reshape them as you ride.</p>
+    <div class="row" id="srcRow">
+      <button id="btnNas">FIND MY MUSIC</button>
       <button id="btnFiles">PICK SONGS</button>
       <button id="btnFolder">PICK A FOLDER</button>
-    </div>
-    <div class="row" id="nasRow">
-      <button id="btnNas">FIND MY NAS</button>
+      <button id="btnDemo">DEMO TRACK</button>
     </div>
     <div class="row" id="urlRow">
       <input type="text" id="urlIn" placeholder="Stream or playlist URL (.mp3, .m3u)" aria-label="Stream or playlist URL">
       <button id="btnUrl">ADD</button>
     </div>
     <div class="status" id="musicStatus"></div>
-    <div class="tracks" id="trackList">Demo track</div>
+    <div class="tabs" id="libTabs">
+      <button data-tab="songs">SONGS</button>
+      <button data-tab="artists">ARTISTS</button>
+      <button data-tab="albums">ALBUMS</button>
+      <button data-tab="genres">GENRES</button>
+      <button data-tab="years">YEARS</button>
+      <button data-tab="playlist">PLAYLIST <span id="plCount">0</span></button>
+    </div>
+    <div class="row"><input type="text" id="libSearch" placeholder="Search songs, artists, albums, genres" aria-label="Search your music"></div>
+    <div class="crumb" id="libCrumb"></div>
+    <div class="liblist" id="libList"></div>
+    <div class="row" id="libActions"></div>
+    <div class="keys" id="libKeys"><b>A</b> add or open · <b>X</b> play now · <b>B</b> back</div>
     <div class="row"><button class="primary" id="btnMusicBack">DONE</button></div>
   </div>
   <input type="file" id="fileIn" accept="audio/*,.mp3,.m4a,.flac,.ogg,.wav,.aac" multiple hidden>
@@ -211,6 +240,7 @@ input[type=text]{font-family:var(--body);font-size:15px;background:var(--snow);c
     <div class="row">
       <button class="primary" id="btnResume">RESUME</button>
       <button id="btnNewMtn" hidden>NEW MOUNTAIN</button>
+      <button id="btnPauseMusic">MUSIC</button>
       <button id="btnSkip">NEXT SONG</button>
       <button id="btnQuit">QUIT RUN</button>
     </div>
@@ -710,6 +740,9 @@ const rig = { L1:0.37, L2:0.37, footY:0.3, sh:{}, el:{}, thigh:{}, knee:{} };
   for(const z of [-0.45,0,0.45]){ const s = new THREE.Mesh(new THREE.BoxGeometry(0.47,0.085,0.1), M.deckStripe); s.position.set(0,0.065,z); board.add(s); }
   for(const z of [-0.88,0.88]) add(new THREE.CylinderGeometry(0.23,0.23,0.08,14,1,false,0,Math.PI).rotateY(z>0?0:Math.PI), M.deck, 0,0.06,z+(z>0?-0.02:0.02), 0.03, board);
   for(const z of [-0.29,0.29]) add(new THREE.BoxGeometry(0.34,0.22,0.27), M.boots, 0.04,0.2,z, 0.035, board);
+  rig.tips = [new THREE.Object3D(), new THREE.Object3D()];
+  rig.tips[0].position.set(0, 0.06, 0.95); rig.tips[1].position.set(0, 0.06, -0.95);
+  board.add(rig.tips[0], rig.tips[1]);
   // legs: thigh -> knee -> shin, solved each frame so feet stay planted
   for(const s of [1,-1]){
     const thigh = new THREE.Group(); m.add(thigh);
@@ -761,7 +794,7 @@ function animateRider(dt){
   const t = performance.now()/1000;
   const ls = Math.cos(P.spin) >= 0 ? 1 : -1;        // riding regular or switch
   const air = !P.grounded && state !== 'crash';
-  const spdF = clamp(P.speed/30, 0, 1), st = input.steer;
+  const spdF = clamp(P.speed/30, 0, 1), st = input.turn;
   let H, bend, twist, look, tilt = 0, tz = 0, tx = 0;
   let A;
   if(state === 'crash'){
@@ -770,13 +803,17 @@ function animateRider(dt){
     A = flail; H = 0.66; bend = 0.25 + Math.sin(t*11)*0.25; twist = Math.sin(t*9)*0.7; look = -ls;
   } else if(air){
     const g = P.grab, fl = Math.sin(t*8)*0.14;
-    H = g ? 0.34 : 0.47 - Math.abs(input.vert)*0.08;
-    bend = 0.32 + (g==='indy' ? 0.55 : 0) + (g==='method' ? -0.32 : 0) + Math.abs(input.vert)*0.2;
-    twist = clamp(P.spinVel*0.07, -0.85, 0.85) - 0.2*ls;
-    look = -1.05*ls + clamp(P.spinVel*0.06, -0.5, 0.5);
+    const spinAmt = clamp(Math.abs(P.spinVel)/7, 0, 1), flipAmt = clamp(Math.abs(P.flipVel)/5.5, 0, 1);
+    H = g ? 0.3 : 0.47 - spinAmt*0.1 - flipAmt*0.22;                       // knees come way up into tricks
+    bend = 0.32 + flipAmt*0.6 + (g==='indy' ? 0.65 : 0) + (g==='method' ? -0.45 : 0);
+    // the upper body winds ahead of the spin and the arms whip around it
+    twist = clamp(P.spinVel*0.13, -1.25, 1.25) - 0.2*ls;
+    look = -1.05*ls + clamp(P.spinVel*0.09, -0.8, 0.8);
     A = [{ r:1.25+fl, s:0.25, e:0.3 }, { r:1.1-fl, s:0.1, e:0.35 }];
-    if(g === 'indy'){ A = [{ r:2.4, s:0.35, e:0.2 }, { r:0.12, s:1.35, e:0.12 }]; tx = 0.22*ls; }
-    if(g === 'method'){ A = [{ r:0.25, s:-0.95, e:0.2 }, { r:2.2, s:0.5, e:0.3 }]; tz = 0.5; }
+    if(spinAmt > 0.3) A = [{ r:0.35, s:0.9, e:1.5 }, { r:0.35, s:0.9, e:1.5 }];               // arms tucked in to spin fast
+    if(flipAmt > 0.3) A = [{ r:0.25, s:1.5, e:1.0 }, { r:0.25, s:1.5, e:1.0 }];               // hugging the knees
+    if(g === 'indy'){ A = [{ r:2.7, s:0.5, e:0.15 }, { r:0.1, s:1.5, e:0.1 }]; tx = 0.5*ls; }  // style arm up, board poked out
+    if(g === 'method'){ A = [{ r:0.3, s:-1.2, e:0.2 }, { r:2.5, s:0.6, e:0.2 }]; tz = 0.95; }  // board pulled up behind the back
   } else {
     const tuck = input.tuck ? 1 : 0, sway = Math.sin(t*1.7)*0.07, breathe = Math.sin(t*2.3)*0.012*(1-spdF);
     H = 0.6 - tuck*0.17 - Math.abs(st)*0.1*(0.4+spdF) + breathe;
@@ -824,27 +861,169 @@ function updateScarf(dt){
   scarf.segs.forEach((s,i) => { s.position.lerpVectors(p[i], p[i+1], 0.5); s.lookAt(p[i+1]); });
 }
 
-/* Snow spray (comic puffs) */
-const SPRAY = 380;
-const sprayGeo = new THREE.BufferGeometry();
-const sprayPos = new Float32Array(SPRAY*3), sprayVel = new Float32Array(SPRAY*3), sprayLife = new Float32Array(SPRAY);
-sprayGeo.setAttribute('position', new THREE.BufferAttribute(sprayPos,3));
-const spray = new THREE.Points(sprayGeo, new THREE.PointsMaterial({ map:puffTex, size:0.55, alphaTest:0.5, transparent:false }));
-spray.frustumCulled = false; scene.add(spray);
-let sprayIdx = 0;
-function emitSpray(x,y,z,vx,vy,vz){
-  const i = sprayIdx = (sprayIdx+1)%SPRAY;
-  sprayPos[i*3]=x; sprayPos[i*3+1]=y; sprayPos[i*3+2]=z;
-  sprayVel[i*3]=vx; sprayVel[i*3+1]=vy; sprayVel[i*3+2]=vz; sprayLife[i]=0.5+Math.random()*0.4;
+/* ---------- Snow: sized particles (fast spray + slow powder clouds), board tracks, trick streaks ---------- */
+const SNOW = 1600;
+const snowGeo = new THREE.BufferGeometry();
+const snowPos = new Float32Array(SNOW*3), snowSize = new Float32Array(SNOW);
+const snowVel = new Float32Array(SNOW*3), snowLife = new Float32Array(SNOW), snowMax = new Float32Array(SNOW), snowS0 = new Float32Array(SNOW), snowKind = new Uint8Array(SNOW);
+snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos,3));
+snowGeo.setAttribute('size', new THREE.BufferAttribute(snowSize,1));
+const snowMat = new THREE.ShaderMaterial({
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map:{ value:puffTex }, uScale:{ value:500 } }]),
+  vertexShader: `
+    #include <common>
+    #include <fog_pars_vertex>
+    attribute float size; uniform float uScale;
+    void main(){
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = size * uScale / max(0.5, -mvPosition.z);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: `
+    #include <common>
+    #include <fog_pars_fragment>
+    uniform sampler2D map;
+    void main(){
+      vec4 t = texture2D(map, gl_PointCoord);
+      if(t.a < 0.5) discard;
+      gl_FragColor = vec4(t.rgb, 1.0);
+      #include <fog_fragment>
+    }`,
+  fog: true
+});
+const snow = new THREE.Points(snowGeo, snowMat);
+snow.frustumCulled = false; scene.add(snow);
+for(let i=0;i<SNOW;i++) snowPos[i*3+1] = -9999;
+let snowIdx = 0;
+function emitSnow(x,y,z,vx,vy,vz,size,life,kind){
+  const i = snowIdx = (snowIdx+1)%SNOW;
+  snowPos[i*3]=x; snowPos[i*3+1]=y; snowPos[i*3+2]=z;
+  snowVel[i*3]=vx; snowVel[i*3+1]=vy; snowVel[i*3+2]=vz;
+  snowLife[i]=life; snowMax[i]=life; snowS0[i]=size; snowSize[i]=size; snowKind[i]=kind;
 }
-function updateSpray(dt){
-  for(let i=0;i<SPRAY;i++){
-    if(sprayLife[i]<=0){ sprayPos[i*3+1] = -9999; continue; }
-    sprayLife[i]-=dt; sprayVel[i*3+1]-=9*dt;
-    sprayPos[i*3]+=sprayVel[i*3]*dt; sprayPos[i*3+1]+=sprayVel[i*3+1]*dt; sprayPos[i*3+2]+=sprayVel[i*3+2]*dt;
+function emitSpray(x,y,z,vx,vy,vz){ emitSnow(x,y,z,vx,vy,vz, 0.25+Math.random()*0.3, 0.5+Math.random()*0.4, 0); }
+const rnd = (a,b) => a + Math.random()*(b-a);
+function snowBurst(x,y,z,n,s){
+  for(let i=0;i<n;i++) emitSnow(x+rnd(-.5,.5), y+0.2, z+rnd(-.5,.5), rnd(-2,2), rnd(1,3), rnd(-2,2)+Math.cos(P.heading)*P.speed*0.2, s*rnd(.8,1.6), rnd(.6,1.1), 1);
+}
+// big landings throw a ring of spray and leave a cloud of powder hanging in the air
+function landingBurst(impact){
+  const fx = Math.sin(P.heading), fz = Math.cos(P.heading), k = clamp(impact/20, 0.3, 2.2);
+  const n = Math.round(30 + k*60);
+  for(let i=0;i<n;i++){
+    const a = Math.random()*TAU, sp = rnd(3, 6+impact*0.35);
+    emitSnow(P.x+Math.cos(a)*0.5, P.y+0.15, P.z+Math.sin(a)*0.5, Math.cos(a)*sp + fx*P.speed*0.4, rnd(2, 3+impact*0.22), Math.sin(a)*sp + fz*P.speed*0.4, rnd(0.25,0.55), rnd(0.5,1.0), 0);
   }
-  sprayGeo.attributes.position.needsUpdate = true;
+  for(let i=0;i<Math.round(6 + k*14);i++){
+    const a = Math.random()*TAU, sp = rnd(1, 3+k*2);
+    emitSnow(P.x+Math.cos(a)*rnd(0.3,1.5), P.y+rnd(0.2,0.8), P.z+Math.sin(a)*rnd(0.3,1.5), Math.cos(a)*sp + fx*P.speed*0.25, rnd(0.5,2), Math.sin(a)*sp + fz*P.speed*0.25, rnd(0.9,1.8)*(0.7+k*0.4), rnd(1.1,2.2), 1);
+  }
+  if(!reduceMotion) shake = Math.max(shake, clamp((impact-10)/28, 0, 0.55));
 }
+// carving throws a rooster tail off the board edge, sized by speed and how hard you turn
+let carveAcc = 0;
+function carveSnow(dt){
+  const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
+  const turn = Math.abs(input.turn), spd = P.speed;
+  const rate = spd*0.9 + turn*spd*5.5 + (input.tuck ? spd*0.6 : 0);   // particles per second
+  carveAcc += rate*dt;
+  const side = -Math.sign(input.turn || 0.0001);                   // spray goes to the outside of the turn
+  const ox = fz*side, oz = -fx*side;
+  while(carveAcc >= 1){
+    carveAcc -= 1;
+    const out = turn*spd*rnd(0.18,0.42), up = rnd(1.2, 2.5) + turn*spd*rnd(0.06,0.16);
+    emitSnow(P.x - fx*rnd(0.2,0.8) + ox*0.25, P.y+0.08, P.z - fz*rnd(0.2,0.8) + oz*0.25,
+      ox*out - fx*spd*rnd(0.05,0.2) + rnd(-.6,.6), up, oz*out - fz*spd*rnd(0.05,0.2) + rnd(-.6,.6),
+      rnd(0.2, 0.42), rnd(0.45, 0.9), 0);
+    if(Math.random() < 0.06 + turn*0.1) emitSnow(P.x - fx*0.8 + ox*0.6, P.y+0.3, P.z - fz*0.8 + oz*0.6, ox*out*0.3 + fx*spd*0.3, rnd(0.3,1), oz*out*0.3 + fz*spd*0.3, rnd(0.8,1.4), rnd(0.8,1.4), 1);
+  }
+}
+function updateSnow(dt){
+  const ground = course ? groundH : null;
+  for(let i=0;i<SNOW;i++){
+    if(snowLife[i] <= 0){ if(snowSize[i] !== 0){ snowSize[i] = 0; snowPos[i*3+1] = -9999; } continue; }
+    snowLife[i] -= dt;
+    const t = 1 - snowLife[i]/snowMax[i], j = i*3;
+    if(snowKind[i] === 0){                                   // spray: heavy, falls fast, settles on the snow
+      snowVel[j+1] -= 11*dt; const d = Math.exp(-1.6*dt); snowVel[j]*=d; snowVel[j+2]*=d;
+      snowSize[i] = snowS0[i] * (t < 0.7 ? 1 + t*0.4 : 1.28*(1-t)/0.3);
+    } else {                                                 // powder cloud: drifts, swells, hangs in the air
+      snowVel[j+1] -= 0.8*dt; const d = Math.exp(-2.6*dt); snowVel[j]*=d; snowVel[j+1]*=d; snowVel[j+2]*=d;
+      snowSize[i] = snowS0[i] * (t < 0.75 ? 1 + t*2 : 2.5*(1-t)/0.25);
+    }
+    snowPos[j] += snowVel[j]*dt; snowPos[j+1] += snowVel[j+1]*dt; snowPos[j+2] += snowVel[j+2]*dt;
+    if(ground && snowKind[i] === 0 && (i & 1) === (frameParity & 1)){
+      const gy = ground(snowPos[j], snowPos[j+2]) + 0.05;
+      if(snowPos[j+1] < gy){ snowPos[j+1] = gy; snowVel[j+1] *= -0.15; snowVel[j] *= 0.4; snowVel[j+2] *= 0.4; }
+    }
+  }
+  snowGeo.attributes.position.needsUpdate = true; snowGeo.attributes.size.needsUpdate = true;
+}
+let frameParity = 0;
+function resetSnow(){ snowLife.fill(0); carveAcc = 0; tracks.reset(); streaks.forEach(s => s.reset()); }
+
+/* Board tracks left in the snow */
+const tracks = (() => {
+  const N = 320, pts = [], geo = new THREE.BufferGeometry(), pos = new Float32Array(N*2*3), idx = [];
+  for(let i=0;i<N-1;i++){ const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); }
+  geo.setIndex(idx); geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:0xb9adff, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }));
+  mesh.frustumCulled = false; scene.add(mesh);
+  let last = null, dirty = false;
+  function rebuild(){
+    for(let i=0;i<N;i++){
+      const p = pts[Math.min(i, pts.length-1)] || { x:0, y:-9999, z:0, w:0, nx:0, nz:0 };
+      const w = i < pts.length ? p.w : 0;
+      pos[i*6] = p.x + p.nx*w; pos[i*6+1] = p.y; pos[i*6+2] = p.z + p.nz*w;
+      pos[i*6+3] = p.x - p.nx*w; pos[i*6+4] = p.y; pos[i*6+5] = p.z - p.nz*w;
+    }
+    geo.attributes.position.needsUpdate = true; dirty = false;
+  }
+  return {
+    update(){
+      if(state !== 'ride' && state !== 'crash'){ return; }
+      const on = P.grounded && state === 'ride';
+      if(!last || Math.hypot(P.x-last.x, P.z-last.z) > 0.7 || (!on && last.w)){
+        const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
+        const w = on ? 0.2 + Math.abs(input.turn)*0.14 : 0;
+        const p = { x:P.x, y:groundH(P.x,P.z)+0.03, z:P.z, w, nx:fz, nz:-fx };
+        if(on && last && !last.w) pts.push(Object.assign({}, p, { w:0 }));   // start a new stretch cleanly after a jump
+        pts.push(p); if(pts.length > N) pts.splice(0, pts.length - N);
+        last = p; dirty = true;
+      }
+      if(dirty) rebuild();
+    },
+    reset(){ pts.length = 0; last = null; rebuild(); }
+  };
+})();
+
+/* Streaks off the board nose and tail while tricking */
+function makeStreak(color){
+  const N = 26, geo = new THREE.BufferGeometry(), pos = new Float32Array(N*2*3), idx = [], hist = [];
+  for(let i=0;i<N-1;i++){ const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); }
+  geo.setIndex(idx); geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, side:THREE.DoubleSide, fog:false }));
+  mesh.frustumCulled = false; scene.add(mesh);
+  const cam = new THREE.Vector3(), d = new THREE.Vector3(), n = new THREE.Vector3();
+  return {
+    push(p, on){ hist.unshift({ x:p.x, y:p.y, z:p.z, on }); if(hist.length > N) hist.pop(); },
+    draw(){
+      camera.getWorldPosition(cam);
+      for(let i=0;i<N;i++){
+        const a = hist[Math.min(i, hist.length-1)], b = hist[Math.min(i+1, hist.length-1)];
+        if(!a){ pos.fill(0, i*6, i*6+6); pos[i*6+1] = pos[i*6+4] = -9999; continue; }
+        d.set(a.x-b.x, a.y-b.y, a.z-b.z); n.set(cam.x-a.x, cam.y-a.y, cam.z-a.z).cross(d).normalize();
+        const w = a.on ? 0.16*(1 - i/N) : 0;
+        pos[i*6]=a.x+n.x*w; pos[i*6+1]=a.y+n.y*w; pos[i*6+2]=a.z+n.z*w;
+        pos[i*6+3]=a.x-n.x*w; pos[i*6+4]=a.y-n.y*w; pos[i*6+5]=a.z-n.z*w;
+      }
+      geo.attributes.position.needsUpdate = true;
+    },
+    reset(){ hist.length = 0; this.draw(); }
+  };
+}
+const streaks = [makeStreak(0xff3d8b), makeStreak(0x2fe0ff)];
 
 /* ---------- Post pass: ink edges from depth, punchier color, speed lines ---------- */
 const canPost = renderer.capabilities.isWebGL2 || renderer.extensions.has('WEBGL_depth_texture');
@@ -888,9 +1067,11 @@ const postMat = new THREE.ShaderMaterial({
 const postScene = new THREE.Scene();
 postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), postMat));
 
+let drawH = 720;
 function resize(){
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+  drawH = renderer.getDrawingBufferSize(new THREE.Vector2()).y;
   if(canPost){
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     if(rt){ rt.depthTexture.dispose(); rt.dispose(); }
@@ -915,7 +1096,11 @@ const Music = {
     el.crossOrigin = 'anonymous'; el.preload = 'auto';
     el.preservesPitch = false; el.mozPreservesPitch = false; el.webkitPreservesPitch = false;
     el.addEventListener('ended', () => this.next());
-    el.addEventListener('error', () => { if(this.tracks.length>1) this.next(); });
+    el.addEventListener('error', () => {
+      const t = this.tracks[this.idx] || {}, code = el.error ? el.error.code : '?';
+      hostLog(`Couldn't play "${t.title}" (media error ${code})`);
+      if(this.tracks.length > 1){ clearTimeout(this.errT); this.errT = setTimeout(() => this.next(), 700); }
+    });
     const src = ctx.createMediaElementSource(el);
     this.bassF = ctx.createBiquadFilter(); this.bassF.type='lowshelf'; this.bassF.frequency.value=110;
     this.lp = ctx.createBiquadFilter(); this.lp.type='lowpass'; this.lp.Q.value=0.9; this.lp.frequency.value=20000;
@@ -940,15 +1125,16 @@ const Music = {
   async useDemo(){
     setStatus('Mixing the demo track…');
     if(!this.demoUrl) this.demoUrl = URL.createObjectURL(await renderDemo());
-    this.setTracks([{ title:'Powder Pulse demo loop', url:this.demoUrl, loop:true }], 'DEMO TRACK');
+    this.setTracks([{ title:'Powder Pulse demo loop', url:this.demoUrl, loop:true }], 'DEMO TRACK', true);
     setStatus('');
   },
-  setTracks(list, label){
+  setTracks(list, label, now=false){
     if(!list.length){ setStatus('No playable songs found there.'); return; }
-    this.tracks = list; this.idx = 0; this.source = label;
-    $('srcLbl').textContent = label;
-    $('trackList').textContent = list.map((t,i)=>`${i+1}. ${t.title}`).join('\n');
-    $('trackList').style.whiteSpace = 'pre-line';
+    this.tracks = list; this.source = label;
+    $('srcLbl').textContent = label.replace(' · SHUFFLED','');
+    $('queueLbl').textContent = `Up next: ${label} · ${list.length.toLocaleString()} ${list.length===1?'song':'songs'}`;
+    if(this.playing && this.el && !this.el.paused && !now){ this.idx = -1; return; }   // current song finishes first
+    this.idx = 0;
     if(this.playing) this.play();
   },
   play(){
@@ -959,6 +1145,7 @@ const Music = {
     $('npLbl').textContent = t.title;
   },
   next(){ if(!this.tracks.length) return; this.idx = (this.idx+1) % this.tracks.length; this.play(); },
+  prev(){ if(!this.tracks.length) return; this.idx = (this.idx-1+this.tracks.length) % this.tracks.length; this.play(); },
   set(param, v, tc=0.08){ param.setTargetAtTime(v, this.ctx.currentTime, tc); },
   land(clean){
     if(!this.ctx || !clean) return;
@@ -1047,10 +1234,10 @@ function setStatus(t){ $('musicStatus').textContent = t; }
 function filesToTracks(files){
   return [...files].filter(f => AUDIO_EXT.test(f.name) || (f.type||'').startsWith('audio/'))
     .sort((a,b)=>(a.webkitRelativePath||a.name).localeCompare(b.webkitRelativePath||b.name))
-    .map(f => ({ title: f.name.replace(/\.[^.]+$/,''), url: URL.createObjectURL(f) }));
+    .map((f,i) => { const parts = (f.webkitRelativePath||'').split('/'); return { k:'file:'+i+':'+f.name, t: f.name.replace(/\.[^.]+$/,''), l: parts.length > 2 ? parts[parts.length-2] : undefined, src: URL.createObjectURL(f) }; });
 }
-$('fileIn').addEventListener('change', e => { Music.setTracks(filesToTracks(e.target.files), 'MY SONGS'); setStatus(`${Music.tracks.length} songs ready.`); });
-$('folderIn').addEventListener('change', e => { Music.setTracks(filesToTracks(e.target.files), 'MY FOLDER'); setStatus(`${Music.tracks.length} songs ready.`); });
+$('fileIn').addEventListener('change', e => { const s = filesToTracks(e.target.files); if(s.length) setLibrary(s, 'files'); else setStatus('No playable songs found there.'); });
+$('folderIn').addEventListener('change', e => { const s = filesToTracks(e.target.files); if(s.length) setLibrary(s, 'files'); else setStatus('No playable songs found there.'); });
 const bridge = window.chrome && window.chrome.webview;
 let nativePad = null;
 function nativeGamepad(){
@@ -1065,21 +1252,22 @@ if(bridge){
     if(!m) return;
     if(m.type === 'pad'){ nativePad = m; nativePad.t = performance.now(); return; }
     if(m.type === 'music.status'){ setStatus(m.text || ''); return; }
-    if(m.type === 'music.library' && Array.isArray(m.tracks)){
-      Music.setTracks(m.tracks.map(t => ({ title:t.title||'Untitled', url:t.url })), m.source==='usb' ? 'USB DRIVE' : 'MY NAS');
-      setStatus(`${m.tracks.length.toLocaleString()} songs ready, shuffled.`);
+    if(m.type === 'music.library' && Array.isArray(m.songs)){
+      if(m.part === 0) Lib.incoming = [];
+      for(const s of m.songs) Lib.incoming.push(s);
+      if(m.last){ const s = Lib.incoming; Lib.incoming = []; setLibrary(s, m.source); }
     }
   });
-  $('musicNote').textContent = 'Your NAS music loads by itself when the game starts. Choose Find my music to look again, for example after plugging in a USB drive.';
+  $('musicNote').textContent = 'Your NAS music loads by itself. Browse it below and build a playlist. Choose Find my music to look again, for example after plugging in a USB drive.';
   $('btnNas').textContent = 'FIND MY MUSIC';
   $('btnFiles').hidden = true; $('btnFolder').hidden = true; $('urlRow').hidden = true;
 } else {
-  $('nasRow').hidden = true;
+  $('btnNas').hidden = true;
   $('musicNote').textContent = 'Pick songs from a USB drive or this device. On the Xbox build, Find my NAS appears here and pulls your library over DLNA, the same way WMC SX does.';
 }
 $('btnNas').addEventListener('click', () => { setStatus('Looking for music…'); bridge.postMessage(JSON.stringify({ type:'music.requestLibrary', sources:['dlna','usb'] })); });
 if(bridge){ $('srcLbl').textContent = 'FINDING…'; bridge.postMessage(JSON.stringify({ type:'music.requestLibrary', sources:['dlna','usb'], quiet:true })); setTimeout(() => { if($('srcLbl').textContent === 'FINDING…') $('srcLbl').textContent = 'DEMO TRACK'; }, 20000); }
-$('btnDemo').addEventListener('click', async () => { if(Music.ctx) await Music.useDemo(); else { Music.tracks=[]; $('srcLbl').textContent='DEMO TRACK'; $('trackList').textContent='Demo track'; } });
+$('btnDemo').addEventListener('click', async () => { if(Music.ctx) await Music.useDemo(); else { Music.tracks=[]; $('srcLbl').textContent='DEMO TRACK'; $('queueLbl').textContent='Up next: demo track'; } });
 $('btnFiles').addEventListener('click', () => $('fileIn').click());
 $('btnFolder').addEventListener('click', () => $('folderIn').click());
 $('btnUrl').addEventListener('click', async () => {
@@ -1088,11 +1276,150 @@ $('btnUrl').addEventListener('click', async () => {
     if(/\.m3u8?($|\?)/i.test(u)){
       const txt = await (await fetch(u)).text(), base = new URL(u, location.href);
       const list = txt.split(/\r?\n/).filter(l => l && !l.startsWith('#')).map(l => ({ title: decodeURIComponent(l.split('/').pop()).replace(/\.[^.]+$/,''), url: new URL(l, base).href }));
-      Music.setTracks(list, 'PLAYLIST');
-    } else Music.setTracks([{ title: decodeURIComponent(u.split('/').pop()).replace(/\.[^.]+$/,'') || 'Stream', url:u }], 'STREAM');
+      Music.setTracks(list, 'PLAYLIST', true);
+    } else Music.setTracks([{ title: decodeURIComponent(u.split('/').pop()).replace(/\.[^.]+$/,'') || 'Stream', url:u }], 'STREAM', true);
     setStatus('Added. If it stays silent, that server blocks web playback; the Xbox build streams it directly.');
   }catch(err){ setStatus('Couldn’t reach that address from here. The Xbox build can stream it directly.'); }
 });
+
+/* ---------- Music library + playlist ---------- */
+const MUSIC_HOST = 'https://music.powderpulse/';
+const Lib = { songs:[], source:'', tab:'songs', drill:null, groups:{}, incoming:[] };
+const Playlist = {
+  list: [], keys: new Set(),
+  load(){ try{ this.list = JSON.parse(store('pp_playlist') || '[]') || []; }catch(e){ this.list = []; } this.keys = new Set(this.list.map(s => s.k)); },
+  save(){ store('pp_playlist', JSON.stringify(this.list.filter(s => !s.src))); $('plCount').textContent = this.list.length; },
+  has(s){ return this.keys.has(s.k); },
+  toggle(s){ if(this.has(s)){ this.list = this.list.filter(x => x.k !== s.k); this.keys.delete(s.k); } else { this.list.push(s); this.keys.add(s.k); } this.save(); },
+  addAll(arr){ for(const s of arr) if(!this.has(s)){ this.list.push(s); this.keys.add(s.k); } this.save(); },
+  clear(){ this.list = []; this.keys.clear(); this.save(); }
+};
+Playlist.load(); $('plCount').textContent = Playlist.list.length;
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const songTitle = s => (s.a ? s.a + ' – ' : '') + s.t;
+function songUrl(s){
+  if(s.src) return s.src;
+  if(s.k.startsWith('usb:')) return MUSIC_HOST + 'usb?i=' + s.k.slice(4);
+  return MUSIC_HOST + 'nas?u=' + encodeURIComponent(s.k);
+}
+const toTrack = s => ({ title: songTitle(s), url: songUrl(s), key: s.k });
+function shuffled(arr){ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function hostLog(t){ try{ if(bridge) bridge.postMessage(JSON.stringify({ type:'log', text:String(t) })); }catch(e){} }
+
+function setLibrary(songs, source){
+  const cmp = (x,y) => (x||'').localeCompare(y||'', undefined, { sensitivity:'base' });
+  songs.sort((p,q) => cmp(p.a,q.a) || cmp(p.l,q.l) || ((p.n||0)-(q.n||0)) || cmp(p.t,q.t));
+  Lib.songs = songs; Lib.source = source; Lib.groups = {}; Lib.drill = null;
+  // playlist entries saved earlier pick up the current address (USB indexes change between sessions)
+  const byKey = new Map(songs.map(s => [s.k, s]));
+  Playlist.list = Playlist.list.map(s => byKey.get(s.k) || s); Playlist.keys = new Set(Playlist.list.map(s => s.k));
+  setStatus(`${songs.length.toLocaleString()} songs ${source === 'nas' ? 'on your NAS' : source === 'usb' ? 'on USB' : 'ready'}.`);
+  // pick what plays without cutting off a song that's already playing
+  const mode = store('pp_mode') || 'all';
+  if(mode === 'playlist' && Playlist.list.length) queueSongs(Playlist.list, 'MY PLAYLIST', true, false, 'playlist');
+  else queueSongs(songs, 'ALL MY MUSIC', true, false, 'all');
+  if(!$('scrMusic').hidden) renderLib();
+}
+function queueSongs(list, label, shuffle, now, mode){
+  if(!list.length) return;
+  const arr = shuffle ? shuffled(list) : list.slice();
+  Music.setTracks(arr.map(toTrack), label + (shuffle ? ' · SHUFFLED' : ''), now);
+  if(mode) store('pp_mode', mode);
+}
+function groupsFor(tab){
+  if(Lib.groups[tab]) return Lib.groups[tab];
+  const field = { artists:'a', albums:'l', genres:'g', years:'y' }[tab];
+  const unknown = { artists:'Unknown artist', albums:'Unknown album', genres:'Unknown genre', years:'Unknown year' }[tab];
+  const m = new Map();
+  for(const s of Lib.songs){ const k = s[field] || unknown; if(!m.has(k)) m.set(k, []); m.get(k).push(s); }
+  let arr = [...m.entries()].map(([name, songs]) => ({ name, songs, sub: tab==='albums' ? (songs[0].a || '') : '' }));
+  if(tab === 'years') arr.sort((p,q) => (p.name === unknown) - (q.name === unknown) || (q.name > p.name) - (q.name < p.name));
+  else arr.sort((p,q) => p.name.localeCompare(q.name, undefined, { sensitivity:'base' }));
+  return Lib.groups[tab] = arr;
+}
+const LIB_LIMIT = 150;
+let libRows = [];
+function renderLib(){
+  const q = $('libSearch').value.trim().toLowerCase();
+  const tab = Lib.tab;
+  document.querySelectorAll('#libTabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  const hit = s => !q || (s.t+' '+(s.a||'')+' '+(s.l||'')+' '+(s.g||'')+' '+(s.y||'')).toLowerCase().includes(q);
+  let songs = null, groups = null, actions = [];
+  if(Lib.drill){ songs = Lib.drill.songs.filter(hit); }
+  else if(tab === 'songs') songs = Lib.songs.filter(hit);
+  else if(tab === 'playlist') songs = Playlist.list.filter(hit);
+  else groups = groupsFor(tab).filter(g => !q || g.name.toLowerCase().includes(q) || g.sub.toLowerCase().includes(q));
+  $('libCrumb').textContent = Lib.drill ? Lib.drill.name : '';
+  libRows = [];
+  let html = '';
+  if(!Lib.songs.length && tab !== 'playlist'){
+    html = `<button class="lrow note" tabindex="-1">${bridge ? 'Looking for your music… choose Find my music if it doesn\u2019t show up.' : 'Pick songs or a folder to fill your library.'}</button>`;
+  } else if(songs){
+    songs.slice(0, LIB_LIMIT).forEach((s,i) => {
+      libRows.push({ song:s, list:songs, index:i });
+      const added = Playlist.has(s), inPl = tab==='playlist' && !Lib.drill;
+      const sub = [s.a, s.l, s.y].filter(Boolean).join(' · ');
+      html += `<button class="lrow${added && !inPl ? ' added' : ''}" data-r="${libRows.length-1}"><span class="lt">${esc(s.t)}</span><span class="ls">${esc(sub || ' ')}</span><span class="lm">${inPl ? 'REMOVE' : added ? 'ADDED' : '+ ADD'}</span></button>`;
+    });
+    if(!songs.length) html = `<button class="lrow note" tabindex="-1">${tab==='playlist' && !Lib.drill ? 'Your playlist is empty. Add songs from the other tabs.' : 'No songs match.'}</button>`;
+    if(songs.length > LIB_LIMIT) html += `<button class="lrow note" tabindex="-1">Showing ${LIB_LIMIT} of ${songs.length.toLocaleString()}. Search to narrow it down, or use the buttons below for all of them.</button>`;
+    const label = currentLabel();
+    const mode = tab==='playlist' && !Lib.drill ? 'playlist' : !Lib.drill && !q ? 'all' : 'custom';
+    if(songs.length){
+      actions.push(['PLAY', () => { queueSongs(songs, label, false, true, mode); afterQueue(); }, 'primary']);
+      actions.push(['SHUFFLE', () => { queueSongs(songs, label, true, true, mode); afterQueue(); }]);
+      if(!(tab==='playlist' && !Lib.drill)) actions.push([`ADD ${songs.length > 1 ? 'ALL ' + songs.length.toLocaleString() : 'IT'} TO PLAYLIST`, () => { Playlist.addAll(songs); renderLib(); setStatus(`Playlist has ${Playlist.list.length} songs.`); }]);
+      else actions.push(['CLEAR PLAYLIST', clearPlaylist]);
+    }
+  } else {
+    groups.slice(0, LIB_LIMIT).forEach(g => {
+      libRows.push({ group:g });
+      html += `<button class="lrow" data-r="${libRows.length-1}"><span class="lt">${esc(g.name)}</span><span class="ls">${esc([g.sub, g.songs.length + (g.songs.length===1?' song':' songs')].filter(Boolean).join(' · '))}</span><span class="lm">OPEN</span></button>`;
+    });
+    if(!groups.length) html = `<button class="lrow note" tabindex="-1">Nothing matches.</button>`;
+    if(groups.length > LIB_LIMIT) html += `<button class="lrow note" tabindex="-1">Showing ${LIB_LIMIT} of ${groups.length.toLocaleString()}. Search to narrow it down.</button>`;
+  }
+  $('libList').innerHTML = html;
+  $('libActions').innerHTML = '';
+  actions.forEach(([t, fn, cls]) => { const b = document.createElement('button'); b.textContent = t; if(cls) b.className = cls; b.addEventListener('click', fn); $('libActions').appendChild(b); });
+  $('libKeys').hidden = !libRows.length;
+  focusMenu(true);
+}
+let clearArmed = 0;
+function clearPlaylist(){
+  if(performance.now() - clearArmed > 2500){ clearArmed = performance.now(); setStatus('Press Clear playlist again to empty it.'); return; }
+  Playlist.clear(); clearArmed = 0; setStatus('Playlist cleared.'); renderLib();
+}
+function afterQueue(){ setStatus(`Up next: ${Music.source}`); }
+function libActivate(el, playNow){
+  const r = libRows[+el.dataset.r]; if(!r) return;
+  if(r.group){
+    if(playNow){ queueSongs(r.group.songs, labelFor(r.group.name), false, true, 'custom'); afterQueue(); return; }
+    Lib.drill = { name:r.group.name, songs:r.group.songs, label:labelFor(r.group.name) }; $('libSearch').value = ''; menuFocus = 0; renderLib(); return;
+  }
+  if(playNow){
+    const rest = r.list.slice(r.index).concat(r.list.slice(0, r.index));
+    Music.setTracks(rest.map(toTrack), currentLabel(), true);
+    afterQueue(); return;
+  }
+  Playlist.toggle(r.song);
+  const added = Playlist.has(r.song), inPl = Lib.tab==='playlist' && !Lib.drill;
+  if(inPl){ renderLib(); return; }
+  el.classList.toggle('added', added); el.querySelector('.lm').textContent = added ? 'ADDED' : '+ ADD';
+}
+function currentLabel(){
+  const q = $('libSearch').value.trim();
+  return Lib.drill ? Lib.drill.label : Lib.tab==='playlist' ? 'MY PLAYLIST' : q ? 'SEARCH: ' + q.toUpperCase() : 'ALL MY MUSIC';
+}
+function labelFor(name){ const t = { artists:'ARTIST', albums:'ALBUM', genres:'GENRE', years:'YEAR' }[Lib.tab] || ''; return (t ? t + ': ' : '') + name.toUpperCase(); }
+function libBack(){
+  if(Lib.drill){ Lib.drill = null; menuFocus = 0; renderLib(); return true; }
+  return false;
+}
+$('libTabs').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; Lib.tab = b.dataset.tab; Lib.drill = null; $('libSearch').value=''; renderLib(); });
+$('libList').addEventListener('click', e => { const b = e.target.closest('.lrow'); if(b && b.dataset.r) libActivate(b, false); });
+$('libList').addEventListener('dblclick', e => { const b = e.target.closest('.lrow'); if(b && b.dataset.r) libActivate(b, true); });
+$('libSearch').addEventListener('input', () => { Lib.drill = Lib.drill && $('libSearch').value ? Lib.drill : Lib.drill; renderLib(); });
 
 /* ---------- Power-ups ---------- */
 const POWERS = {
@@ -1109,7 +1436,7 @@ const POWERS = {
 function powerSvg(k){ return `<svg class="ico" viewBox="0 0 38 38" fill="none" stroke="#1b1030" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${POWERS[k].ico}"/></svg>`; }
 
 /* ---------- Game state ---------- */
-const P = { x:0, y:0, z:0, vy:0, heading:0, speed:0, grounded:true, airT:0, spin:0, spinStart:0, spinVel:0, flip:0, jumpsLeft:0, pitch:0, lean:0, leanV:0, crashT:0, invuln:0, shield:0, groundT:0, popped:false, bigAir:false, grab:null, grabT:0, grabName:null, tumble:new THREE.Vector3() };
+const P = { x:0, y:0, z:0, vy:0, heading:0, speed:0, grounded:true, airT:0, spin:0, spinStart:0, spinVel:0, flip:0, flipVel:0, squash:0, squashV:0, jumpsLeft:0, pitch:0, lean:0, leanV:0, crashT:0, invuln:0, shield:0, groundT:0, popped:false, bigAir:false, grab:null, grabT:0, grabName:null, tumble:new THREE.Vector3() };
 let state = 'title';
 let run = { mode:'run', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 };
 let timeScale = 1;
@@ -1133,7 +1460,8 @@ function startPeak(){
   buildCourseMeshes();
   P.x=0; P.z=12; P.y=groundH(0,12); P.vy=0; P.heading=0; P.speed=10; P.grounded=true; P.airT=0;
   P.spin=0; P.flip=0; P.crashT=0; P.invuln=1; P.shield=pw('shield'); P.groundT=0; P.bigAir=false; P.grab=null; P.grabT=0; P.grabName=null;
-  rider.flipG.rotation.set(0,0,0); timeScale = 1;
+  rider.flipG.rotation.set(0,0,0); timeScale = 1; P.squash = 0; P.squashV = 0; P.spinVel = 0; P.flipVel = 0;
+  resetSnow();
   camYaw=0; placeCamera(1, true); resetScarf();
   state='ride'; showScreen(null);
   $('peakLbl').textContent = isFree() ? `FREE RIDE · MTN ${run.peak}` : `PEAK ${run.peak}`;
@@ -1164,17 +1492,22 @@ function crash(reason){
   if(!isFree()){ run.hearts--; renderHearts(); }
   P.tumble.set((Math.random()-.5)*14, (Math.random()-.5)*10, (Math.random()-.5)*14);
   Music.crash(); shake = reduceMotion ? 0 : 0.6;
+  landingBurst(Math.max(14, -P.vy + P.speed*0.4)); snowBurst(P.x, P.y, P.z, 14, 1.4);
   const sub = isFree() ? 'SHAKE IT OFF' : (run.hearts>0 ? `${run.hearts} ${run.hearts===1?'HEART':'HEARTS'} LEFT` : 'RUN OVER');
   popup(reason==='tree' ? 'Timber!' : 'Wipeout', sub, true);
 }
 function land(){
   const air = P.airT, gT = P.grabT, gName = P.grabName;
-  P.grounded = true; P.airT = 0; P.jumpsLeft = 0; P.grab = null; P.grabT = 0; P.grabName = null; P.bigAir = false; P.spinVel = 0;
+  P.grounded = true; P.airT = 0; P.jumpsLeft = 0; P.grab = null; P.grabT = 0; P.grabName = null; P.bigAir = false; P.spinVel = 0; P.flipVel = 0;
   if(air < 0.35){ P.spin = Math.round(P.spin/Math.PI)*Math.PI; P.flip = 0; return; }
   const spinR = Math.round(P.spin/Math.PI)*Math.PI, spinErr = Math.abs(P.spin-spinR);
   const flipR = Math.round(P.flip/TAU)*TAU, flipErr = Math.abs(P.flip-flipR);
-  const tol = 0.55 + pw('soft')*0.3;
-  if(spinErr > tol || flipErr > tol*1.15){ crash('land'); return; }
+  const tol = 0.95 + pw('soft')*0.3;            // about 55 degrees off still lands clean
+  let sketchy = false;
+  if(spinErr > tol || flipErr > tol*1.1){
+    if(spinErr > tol + 0.6 || flipErr > tol*1.1 + 0.6){ crash('land'); return; }
+    sketchy = true;                              // way off but saveable: keep riding, lose the combo
+  }
   const deg = Math.round(Math.abs(spinR-P.spinStart)*180/Math.PI);
   const flips = Math.round(Math.abs(flipR)/TAU), front = flipR>0;
   P.spin = spinR; P.flip = 0;
@@ -1185,7 +1518,12 @@ function land(){
   if(deg>=180) names.push(String(deg));
   if(gT > 0.25){ names.push((gT > 0.9 ? 'Tweaked ' : '') + (gName === 'method' ? 'Method' : 'Indy')); pts += gT*350; }
   if(!names.length && air>1.1) names.push('Big Air');
-  if(names.length){
+  if(sketchy){
+    pts = Math.round(pts*0.4/10)*10; run.score += pts; run.combo = 0; P.speed *= 0.7;
+    P.squashV -= 3; pose.hv -= 2; P.lean = (Math.random()<.5?-1:1)*0.5;
+    popup('Sketchy!', names.length ? `${names.join(' + ')} · +${pts.toLocaleString()}` : 'SAVED IT', true);
+    Music.land(true); if(!reduceMotion) shake = Math.max(shake, 0.4);
+  } else if(names.length){
     run.combo++;
     let mult = 1 + (run.combo-1)*0.5;
     if(pw('bass') && run.combo>=3) mult *= 1.25;
@@ -1271,31 +1609,51 @@ function readInput(){
     if(btn(7)) tuck = true;
     if(btn(0)) jump = true;
     if(btn(2)) grab = 'indy'; if(btn(1)) grab = 'method';
-    for(const i of [0,1,3,9,12,13,14,15]) now[i] = now[i] || btn(i);
+    for(const i of [0,1,2,3,4,9,12,13,14,15]) now[i] = now[i] || btn(i);
     if(Object.values(now).some(Boolean) || ax || ay){ if(!padActive){ padActive = true; $('touch').hidden = true; } }
     break;
   }
   const edge = i => now[i] && !prevPad[i];
   if(edge(9)) togglePause();
-  if(edge(3) && state!=='title') Music.next();
-  if(['scrTitle','scrMusic','scrPick','scrPause','scrOver'].some(s => !$(s).hidden)){
-    const axisStep = Math.abs(steer)>0.6 ? Math.sign(steer) : (Math.abs(vert)>0.6 ? Math.sign(vert) : 0);
-    if(edge(14)||edge(12)) moveFocus(-1); if(edge(15)||edge(13)) moveFocus(1);
-    if(axisStep && !menuAxisHeld){ moveFocus(axisStep); menuAxisHeld = true; } else if(!axisStep) menuAxisHeld = false;
-    if(edge(0)){ const b = focusables()[menuFocus]; if(b) b.click(); }
-    if(edge(1)){ if(!$('scrMusic').hidden) $('btnMusicBack').click(); else if(!$('scrPause').hidden) $('btnResume').click(); }
+  const inMenu = ['scrTitle','scrMusic','scrPick','scrPause','scrOver'].some(s => !$(s).hidden);
+  if(!inMenu && state==='ride'){ if(edge(3)) Music.next(); if(edge(4)) Music.prev(); }
+  if(inMenu){
+    // one step per press; holding a direction repeats so long song lists scroll quickly
+    let dir = Math.abs(steer)>0.6 ? Math.sign(steer) : (Math.abs(vert)>0.6 ? Math.sign(vert) : 0);
+    if(now[14]||now[12]) dir = -1; else if(now[15]||now[13]) dir = 1;
+    const t = performance.now();
+    if(dir && dir !== menuHeldDir){ moveFocus(dir); menuHeldDir = dir; menuRepeatAt = t + 380; }
+    else if(dir && t >= menuRepeatAt){ moveFocus(dir); menuRepeatAt = t + 65; }
+    else if(!dir) menuHeldDir = 0;
+    const cur = focusables()[menuFocus];
+    if(edge(0) && cur){ if(cur.tagName === 'INPUT') cur.focus(); else cur.click(); }
+    if(edge(2) && cur && cur.classList.contains('lrow') && cur.dataset.r) libActivate(cur, true);
+    if(edge(3) && state==='pause') Music.next();
+    if(edge(1)){
+      if(!$('scrMusic').hidden){ if(!libBack()) $('btnMusicBack').click(); }
+      else if(!$('scrPause').hidden) $('btnResume').click();
+    }
   }
   prevPad = now;
   input.jumpEdge = jump && !input.jump;
-  input.steer = clamp(steer,-1,1); input.vert = clamp(vert,-1,1); input.tuck = tuck || (P.grounded && input.vert>0.5); input.jump = jump; input.grab = grab;
+  input.steer = clamp(steer,-1,1); input.turn = -input.steer; input.vert = clamp(vert,-1,1); input.tuck = tuck || (P.grounded && input.vert>0.5); input.jump = jump; input.grab = grab;
 }
-let menuFocus = 0, menuAxisHeld = false;
+let menuFocus = 0, menuHeldDir = 0, menuRepeatAt = 0;
 function focusables(){
   const scr = ['scrTitle','scrMusic','scrPick','scrPause','scrOver'].map($).find(s=>!s.hidden);
-  return scr ? [...scr.querySelectorAll('button')].filter(b => b.offsetParent!==null) : [];
+  return scr ? [...scr.querySelectorAll('button, input[type=text]')].filter(b => b.offsetParent!==null && b.tabIndex !== -1 && !b.disabled) : [];
 }
-function moveFocus(d){ const f = focusables(); if(!f.length) return; menuFocus = (menuFocus + d + f.length) % f.length; focusMenu(); }
-function focusMenu(){ const f = focusables(); f.forEach((b,i)=>b.classList.toggle('focus', padActive && i===menuFocus)); if(padActive && f[menuFocus]) f[menuFocus].focus({preventScroll:true}); }
+function moveFocus(d){ const f = focusables(); if(!f.length) return; menuFocus = clamp(menuFocus + d, 0, f.length-1); focusMenu(); }
+function focusMenu(keep){
+  const f = focusables(); if(!f.length) return;
+  menuFocus = clamp(menuFocus, 0, f.length-1);
+  f.forEach((b,i)=>b.classList.toggle('focus', padActive && i===menuFocus));
+  const el = f[menuFocus];
+  if(padActive && el){
+    if(el.tagName !== 'INPUT' || !keep) el.focus({preventScroll:true});
+    el.scrollIntoView({ block:'nearest' });
+  }
+}
 function togglePause(){
   if(state==='ride'){
     state='pause';
@@ -1314,8 +1672,11 @@ async function begin(btn, fn){
 $('btnStart').addEventListener('click', () => begin($('btnStart'), startRun));
 $('btnFree').addEventListener('click', () => begin($('btnFree'), startFree));
 $('btnNewMtn').addEventListener('click', () => { run.peak++; startPeak(); });
-$('btnMusic').addEventListener('click', () => showScreen('scrMusic'));
-$('btnMusicBack').addEventListener('click', () => showScreen('scrTitle'));
+let musicReturn = 'scrTitle';
+function openMusic(from){ musicReturn = from; showScreen('scrMusic'); renderLib(); }
+$('btnMusic').addEventListener('click', () => openMusic('scrTitle'));
+$('btnPauseMusic').addEventListener('click', () => openMusic('scrPause'));
+$('btnMusicBack').addEventListener('click', () => { Lib.drill = null; showScreen(musicReturn); });
 $('btnResume').addEventListener('click', togglePause);
 $('btnSkip').addEventListener('click', () => Music.next());
 $('btnQuit').addEventListener('click', () => { if(isFree()) $('btnTitle').click(); else gameOver(); });
@@ -1346,27 +1707,34 @@ function step(dt){
     P.groundT += dt;
     if(P.groundT > 3 && run.combo){ run.combo = 0; }
     const turnRate = 1.9 - Math.min(P.speed/40,1)*0.6;
-    P.heading = clamp(P.heading + input.steer*turnRate*dt, -1.35, 1.35);
-    if(!input.steer) P.heading *= Math.exp(-dt*0.4);
+    P.heading = clamp(P.heading + input.turn*turnRate*dt, -1.35, 1.35);
+    if(!input.turn) P.heading *= Math.exp(-dt*0.4);
     const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
     const dh = groundH(P.x+fx*0.6, P.z+fz*0.6) - groundH(P.x-fx*0.6, P.z-fz*0.6);
     const slope = dh/1.2;
     const maxV = (input.tuck ? 38*(1+0.12*pw('turbo')) : 30);
     P.speed += -slope*G*dt;
-    P.speed -= (0.6 + Math.abs(input.steer)*P.speed*0.22 + (P.speed>maxV ? (P.speed-maxV)*1.5 : 0) + 0.008*P.speed*P.speed*(input.tuck?0.55:1))*dt;
+    P.speed -= (0.6 + Math.abs(input.turn)*P.speed*0.22 + (P.speed>maxV ? (P.speed-maxV)*1.5 : 0) + 0.008*P.speed*P.speed*(input.tuck?0.55:1))*dt;
     P.speed = clamp(P.speed, 3, 60);
     P.pitch = lerp(P.pitch, -Math.atan(slope), 1-Math.exp(-dt*12));
-    { const tgt = -input.steer*0.42*clamp(P.speed/20,0.3,1); P.leanV += (tgt-P.lean)*90*dt; P.leanV *= Math.exp(-11*dt); P.lean += P.leanV*dt; }
-    if(input.jumpEdge){ P.vy = Math.max(P.vy,0) + 8.2 + Math.max(0,P.vy*0.3); takeoff(); P.popped=true; pose.hv += 2.6; }
-    const n = Math.min(5, (P.speed*0.06 + Math.abs(input.steer)*P.speed*0.1)|0);
-    for(let i=0;i<n;i++){ const sx=-fz*input.steer, sz=fx*input.steer; emitSpray(P.x - fx*0.6 + (Math.random()-.5)*0.6, P.y+0.15, P.z - fz*0.6, sx*P.speed*0.25+(Math.random()-.5)*2, 1.5+Math.random()*2.5, -fz*P.speed*0.1+sz*P.speed*0.25); }
+    { const tgt = -input.turn*0.42*clamp(P.speed/20,0.3,1); P.leanV += (tgt-P.lean)*90*dt; P.leanV *= Math.exp(-11*dt); P.lean += P.leanV*dt; }
+    if(input.jumpEdge){ P.vy = Math.max(P.vy,0) + 8.2 + Math.max(0,P.vy*0.3); takeoff(); P.popped=true; pose.hv += 2.6; P.squashV += 3.2; snowBurst(P.x, P.y, P.z, 4, 0.5); }
   } else {
     P.airT += dt;
-    const spinRate = 6.6*(1+0.35*pw('whirl')), flipRate = 5.4*(1+0.25*pw('whirl'));
-    P.spinVel = input.steer*spinRate;
+    const spinRate = 7.4*(1+0.35*pw('whirl')), flipRate = 5.8*(1+0.25*pw('whirl'));
+    // spins and flips build up and carry momentum, so they whip around instead of snapping
+    P.spinVel += (input.turn*spinRate - P.spinVel)*(1-Math.exp(-dt*(input.turn ? 7 : 3)));
+    P.flipVel += (-input.vert*flipRate - P.flipVel)*(1-Math.exp(-dt*(input.vert ? 8 : 3.5)));
+    // landing assist: just before touchdown, ease into the nearest clean rotation
+    const tl = timeToLand();
+    if(tl < 0.4){
+      const k = 1-Math.exp(-dt*14);
+      if(Math.abs(input.turn) < 0.3) P.spinVel = lerp(P.spinVel, (Math.round(P.spin/Math.PI)*Math.PI - P.spin)*8, k);
+      if(Math.abs(input.vert) < 0.3) P.flipVel = lerp(P.flipVel, (Math.round(P.flip/TAU)*TAU - P.flip)*8, k);
+    }
     P.spin += P.spinVel*dt;
+    P.flip += P.flipVel*dt;
     if(input.grab && P.airT > 0.1){ P.grab = input.grab; P.grabName = input.grab; P.grabT += dt; } else P.grab = null;
-    P.flip += -input.vert*flipRate*dt;
     P.pitch = lerp(P.pitch, 0, 1-Math.exp(-dt*3));
     P.lean = lerp(P.lean, 0, 1-Math.exp(-dt*4)); P.leanV = 0;
     if(input.jumpEdge){
@@ -1380,7 +1748,7 @@ function step(dt){
   P.x = clamp(P.x, -W/2-25, W/2+25);
   const gh = groundH(P.x, P.z);
   if(P.grounded){
-    if(gh < P.y + (P.vy - G*dt)*dt - 0.03){ takeoff(); P.popped = false; P.y += P.vy*dt; if(P.vy > 4) pose.hv += 1.6; }
+    if(gh < P.y + (P.vy - G*dt)*dt - 0.03){ takeoff(); P.popped = false; P.y += P.vy*dt; if(P.vy > 4){ pose.hv += 1.6; P.squashV += 2.4; snowBurst(P.x, P.y, P.z, 6, 0.6); } }
     else { P.vy = clamp((gh - P.y)/dt, -60, 22); P.y = gh; }
   } else {
     P.y += P.vy*dt;
@@ -1389,8 +1757,8 @@ function step(dt){
       P.y = gh; P.vy = Math.min(0,P.vy); land();
       if(state === 'ride' && aired > 0.3){
         pose.hv -= clamp(impact*0.11, 0.4, 3.6);
-        const fx2 = Math.sin(P.heading), fz2 = Math.cos(P.heading);
-        for(let i=0;i<Math.min(45, impact*2);i++){ const a = Math.random()*TAU, s = 2+Math.random()*impact*0.25; emitSpray(P.x+Math.cos(a)*0.6, P.y+0.1, P.z+Math.sin(a)*0.6, Math.cos(a)*s + fx2*P.speed*0.3, 1+Math.random()*impact*0.18, Math.sin(a)*s + fz2*P.speed*0.3); }
+        P.squashV -= clamp(impact*0.16, 1, 5.5);
+        landingBurst(impact);
         if(!reduceMotion) shake = Math.max(shake, clamp((impact-10)/28, 0, 0.55));
       }
     }
@@ -1411,6 +1779,15 @@ function step(dt){
     else if(d < magR){ const k = Math.min(1, dt*10/d); f.x+=dx*k; f.y+=dy*k; f.z+=dz*k + P.speed*dt; }
   }
   if(P.z >= c.L) finishPeak();
+}
+
+function timeToLand(){
+  const fx = Math.sin(P.heading)*P.speed, fz = Math.cos(P.heading)*P.speed, g = G*Math.max(0.6, 1 - 0.2*pw('moon'));
+  for(let t=0.05; t<=0.4; t+=0.05){
+    const y = P.y + P.vy*t - 0.5*g*t*t;
+    if(y <= groundH(P.x + fx*t, P.z + fz*t)) return t;
+  }
+  return 1;
 }
 
 /* ---------- Camera + visuals ---------- */
@@ -1449,6 +1826,11 @@ function updateRider(dt){
   r.root.rotation.y = P.heading; r.root.rotation.x = P.pitch; r.root.rotation.z = P.lean;
   if(state!=='crash'){ r.spinG.rotation.y = P.spin; r.flipG.rotation.x = P.flip; r.flipG.rotation.z = 0; }
   animateRider(dt);
+  // cartoon squash and stretch: stretch on takeoff, squash on landing, spring back
+  P.squashV += (-P.squash)*140*dt; P.squashV *= Math.exp(-10*dt); P.squash = clamp(P.squash + P.squashV*dt, -0.32, 0.3);
+  r.flipG.scale.set(1 - P.squash*0.5, 1 + P.squash, 1 - P.squash*0.5);
+  const tricking = state==='ride' && !P.grounded && P.airT > 0.12 && (Math.abs(P.spinVel) > 2 || Math.abs(P.flipVel) > 2 || P.grab || P.airT > 0.8);
+  rig.tips.forEach((tip, i) => { tip.getWorldPosition(tmpV); streaks[i].push(tmpV, tricking); streaks[i].draw(); });
   const t = performance.now();
   const blink = P.invuln>0 && state==='ride' && ((t/90)|0)%2;
   for(const mesh of r.meshes) mesh.visible = !blink;
@@ -1495,7 +1877,10 @@ function frame(now){
   const gdt = dt*timeScale;
   const sub = 3, sdt = gdt/sub;
   for(let i=0;i<sub;i++) step(sdt);
-  updateSpray(gdt);
+  frameParity++;
+  if(state==='ride' && P.grounded) carveSnow(gdt);
+  updateSnow(gdt);
+  tracks.update();
   updateRider(gdt);
   updateScarf(gdt);
   updateFlakes(now/1000);
@@ -1506,6 +1891,7 @@ function frame(now){
   if(state==='ride'||state==='crash'||state==='pause') updateHud(dt);
   const sfx = state==='ride' && !reduceMotion ? clamp((P.speed-22)/14, 0, 1) : 0;
   speedFx = lerp(speedFx, sfx, 1-Math.exp(-dt*4));
+  snowMat.uniforms.uScale.value = drawH*0.5/Math.tan(camera.fov*Math.PI/360);
   if(canPost && rt){
     postMat.uniforms.uSpeed.value = speedFx; postMat.uniforms.uTime.value = now/1000;
     renderer.setRenderTarget(rt); renderer.render(scene, camera);

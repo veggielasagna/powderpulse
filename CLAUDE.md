@@ -5,8 +5,10 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 ## Layout
 - `PowderPulse/web/index.html` — the whole game (Three.js r128, Web Audio). `three.min.js` is downloaded by CI, not committed.
 - `PowderPulse/MainPage.xaml.cs` — UWP host: WebView2 on virtual host `game.powderpulse`; polls the controller with Windows.Gaming.Input and posts `{type:'pad', b, x, y, rt}` (bit i = standard Gamepad button i); serves USB songs at `https://music.powderpulse/<index><ext>` with CORS so Web Audio can process them.
-- Page → host message: `{type:'music.requestLibrary', quiet}` (sent quietly at launch, and by Find my music). Host scans the NAS (DLNA, `Services/Dlna.cs` copied from WMC SX) and USB together, shuffles, and replies `music.library` (`tracks:[{title,url}]`, `source` nas|usb) or `music.status` (`text`).
-- NAS crawl: Music-looking top containers, then the first "All Music/Songs/Tracks" list it meets; otherwise walks folders (max 300 browse calls, 3,000 songs). Songs are served at `https://music.powderpulse/s/<n>`: USB files stream directly, NAS songs are downloaded whole into memory (max 80 MB, 2 at a time) because WebResourceRequested needs a seekable stream.
+- Page → host: `{type:'music.requestLibrary', quiet}` (sent quietly at launch, and by Find my music) and `{type:'log', text}` (written to the log, e.g. songs that fail to play).
+- Host → page: the whole library in chunks of 800, `music.library` `{part, last, total, source, songs:[{k,t,a,l,g,y,n,d}]}` (k = NAS address or `usb:<i>`, t title, a artist, l album, g genre, y year, n track, d seconds), or `music.status` `{text}`.
+- NAS crawl: Music-looking top containers, then the first "All Music/Songs/Tracks" list it meets; otherwise walks folders (max 500 browse calls, 40,000 songs). Songs are served at `https://music.powderpulse/nas?u=<address>` (only hosts of discovered media servers) and `/usb?i=<n>`. NAS songs are downloaded whole into memory (max 80 MB, 2 at a time, 3-minute timeout) because WebResourceRequested needs a seekable stream.
+- The page keeps the library, the saved playlist (`localStorage pp_playlist`) and the play mode (`pp_mode`: all, playlist, custom). A new library never cuts off the song that's playing.
 - `Microsoft.Web.WebView2 1.0.4078.44` must stay referenced explicitly, or Xbox reports "WebView2 runtime not detected" (learned on WMC SX).
 - Don't commit home-network details (NAS names, IPs); the repo may be public.
 - Log: `LocalState\powderpulse_log.txt` (Device Portal → File explorer).

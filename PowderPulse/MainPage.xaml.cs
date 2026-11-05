@@ -31,24 +31,40 @@ namespace PowderPulse
     {
         private sealed class Song
         {
-            public string Title;
+            public string Key;          // NAS address, or usb:<index>
+            public string Title, Artist, Album, Genre, Year, Mime;
+            public int Track;
+            public double Duration;
             public string Url;          // NAS song
             public StorageFile File;    // USB song
-            public string Mime;
+
+            public JsonObject ToJson()
+            {
+                var o = new JsonObject();
+                o["k"] = JsonValue.CreateStringValue(Key ?? "");
+                o["t"] = JsonValue.CreateStringValue(Title ?? "Untitled");
+                if (!string.IsNullOrEmpty(Artist)) o["a"] = JsonValue.CreateStringValue(Artist);
+                if (!string.IsNullOrEmpty(Album)) o["l"] = JsonValue.CreateStringValue(Album);
+                if (!string.IsNullOrEmpty(Genre)) o["g"] = JsonValue.CreateStringValue(Genre);
+                if (!string.IsNullOrEmpty(Year)) o["y"] = JsonValue.CreateStringValue(Year);
+                if (Track > 0) o["n"] = JsonValue.CreateNumberValue(Track);
+                if (Duration > 0) o["d"] = JsonValue.CreateNumberValue(Math.Round(Duration));
+                return o;
+            }
         }
 
         private const string AppHost = "game.powderpulse";
         private const string MusicHost = "https://music.powderpulse/";
         private static readonly string[] AudioTypes = { ".mp3", ".m4a", ".aac", ".flac", ".wav", ".wma", ".ogg", ".opus" };
-        private const int MaxSongs = 3000;
-        private const int MaxBrowseCalls = 300;
+        private const int MaxSongs = 40000;
+        private const int MaxBrowseCalls = 500;
         private const long MaxSongBytes = 80L * 1024 * 1024;
 
         private WebView2 web;
         private DispatcherTimer padTimer;
         private string lastPad = "";
         private int padRepeat;
-        private List<Song> songs = new List<Song>();
+        private List<Song> usbSongs = new List<Song>();
         private bool scanning;
         private readonly SemaphoreSlim songGate = new SemaphoreSlim(2, 2);
 
@@ -129,6 +145,7 @@ namespace PowderPulse
             if (!JsonObject.TryParse(raw, out msg)) return;
             string type = J.Str(msg, "type", "");
             if (type == "music.requestLibrary") await FindMusic(J.Bool(msg, "quiet", false));
+            else if (type == "log") Log.Write("Game: " + J.Str(msg, "text", ""));
         }
 
         // ------------------------------------------------------------ Controller: sent to the page whenever it changes
@@ -169,6 +186,9 @@ namespace PowderPulse
         }
 
         // ------------------------------------------------------------ Finding music: NAS (DLNA) and USB drives
+        // The whole library goes to the page (title, artist, album, genre, year, track, length),
+        // in chunks, so the page can browse it and build playlists. The page asks for a song by its
+        // NAS address (https://music.powderpulse/nas?u=...) or USB index (.../usb?i=...).
 
         private async Task FindMusic(bool quiet)
         {
@@ -184,6 +204,7 @@ namespace PowderPulse
                 var usb = usbTask.Result;
                 Log.Write("Music found: " + nas.Count + " on the NAS, " + usb.Count + " on USB");
 
+                usbSongs = usb;
                 var all = new List<Song>(nas);
                 all.AddRange(usb);
                 if (all.Count == 0)
@@ -191,30 +212,22 @@ namespace PowderPulse
                     if (!quiet) PostStatus("No music found. Check that the NAS media server is on, or plug in a USB drive, then try again.");
                     return;
                 }
-                // shuffle so every run plays something different
-                var rng = new Random();
-                for (int i = all.Count - 1; i > 0; i--)
+                const int chunk = 800;
+                int parts = (all.Count + chunk - 1) / chunk;
+                for (int part = 0; part < parts; part++)
                 {
-                    int j = rng.Next(i + 1);
-                    var t = all[i]; all[i] = all[j]; all[j] = t;
+                    var list = new JsonArray();
+                    for (int i = part * chunk; i < Math.Min(all.Count, (part + 1) * chunk); i++) list.Add(all[i].ToJson());
+                    var msg = new JsonObject();
+                    msg["type"] = JsonValue.CreateStringValue("music.library");
+                    msg["part"] = JsonValue.CreateNumberValue(part);
+                    msg["last"] = JsonValue.CreateBooleanValue(part == parts - 1);
+                    msg["total"] = JsonValue.CreateNumberValue(all.Count);
+                    msg["source"] = JsonValue.CreateStringValue(nas.Count > 0 ? "nas" : "usb");
+                    msg["songs"] = list;
+                    Post(msg);
+                    await Task.Delay(15);
                 }
-                if (all.Count > MaxSongs) all = all.Take(MaxSongs).ToList();
-                songs = all;
-
-                var list = new JsonArray();
-                for (int i = 0; i < all.Count; i++)
-                {
-                    var t = new JsonObject();
-                    t["title"] = JsonValue.CreateStringValue(all[i].Title);
-                    t["url"] = JsonValue.CreateStringValue(MusicHost + "s/" + i.ToString(CultureInfo.InvariantCulture));
-                    list.Add(t);
-                }
-                var msg = new JsonObject();
-                msg["type"] = JsonValue.CreateStringValue("music.library");
-                msg["source"] = JsonValue.CreateStringValue(nas.Count > 0 ? "nas" : "usb");
-                msg["count"] = JsonValue.CreateNumberValue(all.Count);
-                msg["tracks"] = list;
-                Post(msg);
             }
             catch (Exception ex)
             {
@@ -239,8 +252,25 @@ namespace PowderPulse
                     {
                         var opts = new QueryOptions(CommonFileQuery.OrderByName, AudioTypes);
                         opts.FolderDepth = FolderDepth.Deep;
-                        var files = await drive.CreateFileQueryWithOptions(opts).GetFilesAsync(0, MaxSongs);
-                        foreach (var f in files) found.Add(new Song { Title = f.DisplayName, File = f, Mime = MimeFor(f.FileType) });
+                        var files = await drive.CreateFileQueryWithOptions(opts).GetFilesAsync(0, 5000);
+                        foreach (var f in files)
+                        {
+                            var song = new Song { Title = f.DisplayName, File = f, Mime = MimeFor(f.FileType) };
+                            try
+                            {
+                                var props = await f.Properties.GetMusicPropertiesAsync();
+                                if (!string.IsNullOrWhiteSpace(props.Title)) song.Title = props.Title;
+                                song.Artist = string.IsNullOrWhiteSpace(props.Artist) ? props.AlbumArtist : props.Artist;
+                                song.Album = props.Album;
+                                song.Genre = props.Genre != null && props.Genre.Count > 0 ? props.Genre[0] : null;
+                                song.Year = props.Year > 0 ? props.Year.ToString(CultureInfo.InvariantCulture) : null;
+                                song.Track = (int)props.TrackNumber;
+                                song.Duration = props.Duration.TotalSeconds;
+                            }
+                            catch { }
+                            song.Key = "usb:" + found.Count.ToString(CultureInfo.InvariantCulture);
+                            found.Add(song);
+                        }
                     }
                     catch (Exception ex) { Log.Write("USB scan of a drive failed: " + ex.Message); }
                 }
@@ -259,7 +289,6 @@ namespace PowderPulse
             try
             {
                 await Dlna.Discover();
-                // servers answer within a couple of seconds
                 for (int i = 0; i < 6 && Dlna.Servers.Count == 0; i++) await Task.Delay(500);
                 await Task.Delay(500);
                 var servers = Dlna.Servers;
@@ -275,11 +304,13 @@ namespace PowderPulse
             return found;
         }
 
+        private sealed class Counter { public int N; }
+
         private async Task<List<JsonObject>> BrowseAll(string serverId, string objectId, Counter calls)
         {
             var items = new List<JsonObject>();
             int start = 0;
-            while (calls.N < MaxBrowseCalls && items.Count < 6000)
+            while (calls.N < MaxBrowseCalls && items.Count < MaxSongs)
             {
                 calls.N++;
                 var page = await Dlna.Browse(serverId, objectId, start, 500);
@@ -292,8 +323,6 @@ namespace PowderPulse
             }
             return items;
         }
-
-        private sealed class Counter { public int N; }
 
         /// <summary>
         /// Walks the server's music folders. Most servers (Synology, Plex, MiniDLNA) have an
@@ -343,11 +372,28 @@ namespace PowderPulse
                 if (J.Str(o, "kind") != "audio") continue;
                 string url = J.Str(o, "url");
                 if (string.IsNullOrEmpty(url) || !seen.Add(url)) continue;
-                string title = J.Str(o, "title", "Untitled");
-                string artist = J.Str(o, "artist");
-                found.Add(new Song { Title = string.IsNullOrEmpty(artist) ? title : artist + " – " + title, Url = url, Mime = J.Str(o, "mime") });
+                found.Add(new Song
+                {
+                    Key = url,
+                    Url = url,
+                    Title = J.Str(o, "title", "Untitled"),
+                    Artist = J.Str(o, "artist"),
+                    Album = J.Str(o, "album"),
+                    Genre = J.Str(o, "genre"),
+                    Year = YearOf(J.Str(o, "date")),
+                    Track = (int)J.Num(o, "track", 0),
+                    Duration = J.Num(o, "duration", 0),
+                    Mime = J.Str(o, "mime")
+                });
                 if (found.Count >= MaxSongs) return;
             }
+        }
+
+        private static string YearOf(string date)
+        {
+            if (string.IsNullOrEmpty(date) || date.Length < 4) return null;
+            int y;
+            return int.TryParse(date.Substring(0, 4), NumberStyles.Integer, CultureInfo.InvariantCulture, out y) && y > 1800 ? y.ToString(CultureInfo.InvariantCulture) : null;
         }
 
         private static string MimeFor(string ext)
@@ -372,25 +418,41 @@ namespace PowderPulse
             try
             {
                 var uri = new Uri(args.Request.Uri);
-                string name = uri.AbsolutePath.Trim('/');
-                if (name.StartsWith("s/")) name = name.Substring(2);
-                int idx;
-                var list = songs;
-                if (int.TryParse(name, NumberStyles.Integer, CultureInfo.InvariantCulture, out idx) && idx >= 0 && idx < list.Count)
+                string path = uri.AbsolutePath.TrimEnd('/');
+                IRandomAccessStream stream = null;
+                string mime = "audio/mpeg";
+                var q = string.IsNullOrEmpty(uri.Query) ? null : new Windows.Foundation.WwwFormUrlDecoder(uri.Query);
+                if (path == "/nas" && q != null)
                 {
-                    var song = list[idx];
-                    IRandomAccessStream stream = null;
-                    if (song.File != null) stream = await song.File.OpenReadAsync();
-                    else stream = await FetchSong(song.Url);
-                    if (stream != null)
+                    string url = q.GetFirstValueByName("u");
+                    Uri target;
+                    // only fetch from media servers this session actually found
+                    if (Uri.TryCreate(url, UriKind.Absolute, out target) && Dlna.Servers.Any(s => string.Equals(s.Host, target.Host, StringComparison.OrdinalIgnoreCase)))
                     {
-                        string mime = string.IsNullOrEmpty(song.Mime) || !song.Mime.StartsWith("audio") ? "audio/mpeg" : song.Mime;
-                        args.Response = sender.Environment.CreateWebResourceResponse(stream, 200, "OK",
-                            "Content-Type: " + mime + "\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store");
-                        return;
+                        stream = await FetchSong(url);
+                        if (stream == null) Log.Write("A NAS song couldn't be read");
+                    }
+                    else Log.Write("Refused a song from an unknown address");
+                }
+                else if (path == "/usb" && q != null)
+                {
+                    int idx;
+                    var list = usbSongs;
+                    if (int.TryParse(q.GetFirstValueByName("i"), NumberStyles.Integer, CultureInfo.InvariantCulture, out idx) && idx >= 0 && idx < list.Count)
+                    {
+                        stream = await list[idx].File.OpenReadAsync();
+                        mime = list[idx].Mime ?? mime;
                     }
                 }
-                args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", "Access-Control-Allow-Origin: *");
+                if (stream != null)
+                {
+                    args.Response = sender.Environment.CreateWebResourceResponse(stream, 200, "OK",
+                        "Content-Type: " + mime + "\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store");
+                }
+                else
+                {
+                    args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", "Access-Control-Allow-Origin: *");
+                }
             }
             catch (Exception ex)
             {
@@ -409,7 +471,7 @@ namespace PowderPulse
             await songGate.WaitAsync();
             try
             {
-                using (var resp = await Dlna.Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+                using (var resp = await SongHttp.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
                 {
                     if (!resp.IsSuccessStatusCode) { Log.Write("NAS song answered " + (int)resp.StatusCode); return null; }
                     long? len = resp.Content.Headers.ContentLength;
@@ -444,5 +506,8 @@ namespace PowderPulse
                 songGate.Release();
             }
         }
+
+        // a separate client with a long timeout: a big FLAC can take longer than the browse timeout
+        private static readonly HttpClient SongHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
     }
 }
