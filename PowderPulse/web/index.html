@@ -48,7 +48,8 @@ canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block}
 .tricky.ready i{box-shadow:0 0 10px rgba(230,194,122,.7)}
 @media (prefers-reduced-motion:no-preference){.tricky.ready i{animation:trickyPulse 1.2s ease-in-out infinite}}
 @keyframes trickyPulse{50%{box-shadow:0 0 2px rgba(230,194,122,.3)}}
-.opt{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--line)}
+.opt:last-of-type{border-bottom:1px solid var(--line)}
 .opt b{font-weight:600;letter-spacing:.06em}
 .opt p{font-size:13px;margin-top:4px}
 .opt button{min-width:76px}
@@ -275,6 +276,10 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
     <div class="opt">
       <div><b>Tricky meter</b><p>Fills as you land six tricks. Press LT (T on a keyboard, or tap the meter) for 10 seconds of faster riding and quicker spins.</p></div>
       <button id="optTricky" aria-pressed="true">ON</button>
+    </div>
+    <div class="opt">
+      <div><b>Trees</b><p>Turn off for open slopes with nothing in your way. Rocks and everything else stay.</p></div>
+      <button id="optTrees" aria-pressed="true">ON</button>
     </div>
     <div class="row"><button class="primary" id="btnOptionsBack">DONE</button></div>
   </div>
@@ -904,7 +909,8 @@ function buildCourseMeshes(){
 
   if(c.skate) buildSkateProps(c);
 
-  // Trees: chunky stacked cones with snow caps, instanced with outlines
+  // Trees: chunky stacked cones with snow caps, instanced with outlines (skipped entirely when there are none)
+  applyTreeOption(c);
   const n = c.trees.length;
   const cone1 = new THREE.ConeGeometry(2.3, 3.6, 6); cone1.translate(0, 3.2, 0);
   const cone2 = new THREE.ConeGeometry(1.75, 3.0, 6); cone2.translate(0, 5.0, 0);
@@ -912,7 +918,7 @@ function buildCourseMeshes(){
   const snowCap = new THREE.ConeGeometry(0.62, 1.1, 6); snowCap.translate(0, 7.5, 0);
   const trunk = new THREE.CylinderGeometry(0.32, 0.42, 1.8, 6); trunk.translate(0, 0.9, 0);
   const parts = [[cone1,leafMat],[cone2,leafMat2],[cone3,leafMat],[snowCap,capMat],[trunk,trunkMat]];
-  for(const [g,m] of parts){
+  if(n) for(const [g,m] of parts){
     const im = new THREE.InstancedMesh(g, m, n), om = new THREE.InstancedMesh(hullGeo(g, 0.14), inkMat, n);
     for(let i=0;i<n;i++){
       const t = c.trees[i], y = groundH(t.x,t.z) - 0.3;
@@ -1198,7 +1204,7 @@ function emitSnow(x,y,z,vx,vy,vz,size,life,kind){
   const i = snowIdx = (snowIdx+1)%SNOW;
   snowPos[i*3]=x; snowPos[i*3+1]=y; snowPos[i*3+2]=z;
   snowVel[i*3]=vx; snowVel[i*3+1]=vy; snowVel[i*3+2]=vz;
-  snowLife[i]=life; snowMax[i]=life; snowS0[i]=size; snowSize[i]=size; snowKind[i]=kind;
+  snowLife[i]=life; snowMax[i]=life; snowS0[i]=size; snowSize[i]=size; snowKind[i]=kind; snowAlive++; snowDirty = true;
 }
 function emitSpray(x,y,z,vx,vy,vz){ emitSnow(x,y,z,vx,vy,vz, 0.25+Math.random()*0.3, 0.5+Math.random()*0.4, 0); }
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -1237,11 +1243,14 @@ function carveSnow(dt){
     if(Math.random() < 0.008 + turn*0.012) emitSnow(P.x - fx*2.2 + ox*0.8, P.y+0.2, P.z - fz*2.2 + oz*0.8, ox*out*0.2, rnd(0.2,0.6), oz*out*0.2, rnd(0.5,0.8), rnd(0.5,0.8), 1);
   }
 }
+let snowAlive = 0;
 function updateSnow(dt){
+  if(snowAlive === 0 && !snowDirty) return;
   const ground = course && course.hg ? groundFast : null;
+  let alive = 0;
   for(let i=0;i<SNOW;i++){
     if(snowLife[i] <= 0){ if(snowSize[i] !== 0){ snowSize[i] = 0; snowPos[i*3+1] = -9999; } continue; }
-    snowLife[i] -= dt;
+    snowLife[i] -= dt; alive++;
     const t = 1 - snowLife[i]/snowMax[i], j = i*3;
     if(snowKind[i] === 0){                                   // spray: heavy, falls fast, settles on the snow
       snowVel[j+1] -= 11*dt; const d = Math.exp(-1.6*dt); snowVel[j]*=d; snowVel[j+2]*=d;
@@ -1257,9 +1266,11 @@ function updateSnow(dt){
     }
   }
   snowGeo.attributes.position.needsUpdate = true; snowGeo.attributes.size.needsUpdate = true;
+  snowAlive = alive; snowDirty = alive > 0;
 }
+let snowDirty = false;
 let frameParity = 0;
-function resetSnow(){ snowLife.fill(0); carveAcc = 0; tracks.reset(); streaks.forEach(s => s.reset()); }
+function resetSnow(){ snowLife.fill(0); snowDirty = true; carveAcc = 0; tracks.reset(); streaks.forEach(s => s.reset()); }
 
 /* Board tracks left in the snow */
 const tracks = (() => {
@@ -1446,6 +1457,15 @@ const Music = {
     this.el.loop = !!t.loop; this.el.src = t.url; this.playing = true;
     this.el.play().catch(()=>{});
     $('npLbl').textContent = t.title;
+    this.prefetchNext();
+  },
+  prefetchNext(){
+    try{
+      if(!bridge || this.tracks.length < 2) return;
+      const nx = this.tracks[(this.idx + 1) % this.tracks.length];
+      if(!nx || !nx.url || nx.url.indexOf('/nas?u=') < 0) return;
+      bridge.postMessage(JSON.stringify({ type:'music.prefetch', u: new URL(nx.url).searchParams.get('u') }));
+    }catch(e){}
   },
   next(){ if(!this.tracks.length) return; this.idx = (this.idx+1) % this.tracks.length; this.play(); },
   prev(){ if(!this.tracks.length) return; this.idx = (this.idx-1+this.tracks.length) % this.tracks.length; this.play(); },
@@ -1796,8 +1816,17 @@ function setTrickyOption(on){
   $('optTricky').textContent = on ? 'ON' : 'OFF'; $('optTricky').setAttribute('aria-pressed', String(on));
   renderTricky();
 }
+const Opts = { trees: store('pp_trees') !== 'off' };
+// the course keeps every tree it generated; the option only decides which ones are used
+function applyTreeOption(c){ if(!c.allTrees) c.allTrees = c.trees; c.trees = Opts.trees ? c.allTrees : []; }
+function setTreesOption(on){
+  const changed = on !== Opts.trees;
+  Opts.trees = on; store('pp_trees', on ? 'on' : 'off');
+  $('optTrees').textContent = on ? 'ON' : 'OFF'; $('optTrees').setAttribute('aria-pressed', String(on));
+  if(changed && course) buildCourseMeshes();
+}
 let optionsReturn = 'scrTitle';
-function openOptions(from){ optionsReturn = from; setTrickyOption(Tricky.enabled); showScreen('scrOptions'); }
+function openOptions(from){ optionsReturn = from; setTrickyOption(Tricky.enabled); setTreesOption(Opts.trees); showScreen('scrOptions'); }
 const isSkate = () => run.mode === 'skate';
 /* Snowskate flip tricks: the board turns under your feet while you stay upright */
 const FLIP_TRICKS = {
@@ -2091,6 +2120,7 @@ $('btnResume').addEventListener('click', togglePause);
 $('btnOptions').addEventListener('click', () => openOptions('scrTitle'));
 $('btnPauseOptions').addEventListener('click', () => openOptions('scrPause'));
 $('optTricky').addEventListener('click', () => setTrickyOption(!Tricky.enabled));
+$('optTrees').addEventListener('click', () => setTreesOption(!Opts.trees));
 $('btnOptionsBack').addEventListener('click', () => showScreen(optionsReturn));
 $('btnSkip').addEventListener('click', () => Music.next());
 $('btnQuit').addEventListener('click', () => { if(isFree()) $('btnTitle').click(); else gameOver(); });
@@ -2396,24 +2426,28 @@ function updateFlakes(t){
 }
 
 /* HUD */
-const eqBars = []; for(let i=0;i<12;i++){ const b=document.createElement('i'); $('eq').appendChild(b); eqBars.push(b); }
+const eqBars = []; for(let i=0;i<12;i++){ const b=document.createElement('i'); b.id = 'eq'+i; $('eq').appendChild(b); eqBars.push(b); }
 let hudT = 0;
+const hudCache = new Map();
+function hudSet(id, prop, value){
+  const key = id + prop; if(hudCache.get(key) === value) return; hudCache.set(key, value);
+  const el = $(id);
+  if(prop === 'text') el.textContent = value; else if(prop === 'hidden') el.hidden = value; else el.style[prop] = value;
+}
 function updateHud(dt){
   hudT += dt; if(hudT < 1/20) return; hudT = 0;
-  $('scoreLbl').textContent = run.score.toLocaleString();
-  $('comboWrap').hidden = !(run.combo>1);
-  $('comboLbl').textContent = run.combo>1 ? `COMBO ×${(1+(run.combo-1)*0.5).toFixed(1)}` : '';
-  $('altLbl').textContent = Math.round(2600 + P.y).toLocaleString();
-  const balancing = state==='ride' && (P.grind || P.manual);
-  $('balance').hidden = !balancing;
-  if(balancing) $('balMark').style.left = `${50 + clamp(P.bal,-1,1)*50}%`;
-  $('spdLbl').textContent = Math.round(P.speed*3.6);
-  $('progFill').style.width = `${clamp(P.z/course.L,0,1)*100}%`;
+  hudSet('scoreLbl', 'text', run.score.toLocaleString());
+  hudSet('comboWrap', 'hidden', !(run.combo>1));
+  hudSet('comboLbl', 'text', run.combo>1 ? `COMBO ×${(1+(run.combo-1)*0.5).toFixed(1)}` : '');
+  hudSet('altLbl', 'text', Math.round(2600 + P.y).toLocaleString());
+  const balancing = !!(state==='ride' && (P.grind || P.manual));
+  hudSet('balance', 'hidden', !balancing);
+  if(balancing) hudSet('balMark', 'left', `${Math.round(50 + clamp(P.bal,-1,1)*50)}%`);
+  hudSet('spdLbl', 'text', String(Math.round(P.speed*3.6)));
+  hudSet('progFill', 'width', `${(clamp(P.z/course.L,0,1)*100).toFixed(1)}%`);
   const l = Music.levels;
-  eqBars.forEach((b,i) => b.style.height = `${8 + (l[i+1]||0)/255*92}%`);
+  eqBars.forEach((b,i) => hudSet('eq'+i, 'height', `${Math.round(8 + (l[i+1]||0)/255*92)}%`));
   renderTricky();
-  const fx = Music.fx;
-  $('fxLbl').textContent = `LP ${fx.lp>=1000?(fx.lp/1000).toFixed(1)+'k':Math.round(fx.lp)} · HP ${Math.round(fx.hp)} · VERB ${Math.round(fx.wet*100)}% · BASS +${Math.round(fx.bass)}dB${Music.rate<0.97?` · TAPE ${Math.round(Music.rate*100)}%`:''}`;
 }
 
 /* ---------- Main loop ---------- */
@@ -2466,7 +2500,7 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 showScreen('scrTitle');
-window.__pp = { P, run, get state(){return state;}, startRun, Music, Tricky };
+window.__pp = { P, run, get state(){return state;}, get course(){return course;}, startRun, Music, Tricky, Opts };
 })();
 </script>
 

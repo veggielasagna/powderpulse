@@ -63,5 +63,29 @@ for (const [mode, button, viewport] of [
   if(label !== 'OFF' || after !== false || problems.length) failed = true;
   await page.close();
 }
+// Trees: off from the title, ride Free Ride with none, then back on from the pause menu mid-ride
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const problems = [];
+  page.on('pageerror', e => problems.push('PAGE ERROR: ' + (e.stack || e.message)));
+  await page.goto(base); await page.waitForTimeout(2000);
+  await page.click('#btnOptions'); await page.waitForTimeout(200);
+  await page.click('#optTrees'); await page.waitForTimeout(400);
+  const titleTrees = await page.evaluate(() => window.__pp.course.trees.length);
+  await page.click('#btnOptionsBack'); await page.click('#btnFree'); await page.waitForTimeout(4000);
+  const rideTrees = await page.evaluate(() => window.__pp.course.trees.length);
+  await page.screenshot({ path: 'tests/shots/no-trees.png' });
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  await page.click('#btnPauseOptions'); await page.waitForTimeout(200);
+  await page.click('#optTrees'); await page.waitForTimeout(500);
+  await page.click('#btnOptionsBack'); await page.click('#btnResume'); await page.waitForTimeout(1500);
+  const back = await page.evaluate(() => ({ trees: window.__pp.course.trees.length, state: window.__pp.state, z: window.__pp.P.z }));
+  await page.waitForTimeout(800);
+  const z2 = await page.evaluate(() => window.__pp.P.z);
+  console.log(`== trees: off -> title ${titleTrees}, free ride ${rideTrees}; back on mid-ride -> ${back.trees} trees, state ${back.state}, ${z2 > back.z ? 'moving' : 'NOT MOVING'}`);
+  problems.forEach(p => console.log('   ' + p.split('\n').slice(0,6).join('\n      ')));
+  if(titleTrees !== 0 || rideTrees !== 0 || back.trees === 0 || !(z2 > back.z) || problems.length) failed = true;
+  await page.close();
+}
 await browser.close();
 console.log(failed ? 'RESULT: PROBLEMS FOUND' : 'RESULT: ALL MODES RUN');

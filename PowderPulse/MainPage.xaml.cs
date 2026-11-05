@@ -147,6 +147,7 @@ namespace PowderPulse
             string type = J.Str(msg, "type", "");
             if (type == "music.requestLibrary") await FindMusic(J.Bool(msg, "quiet", false));
             else if (type == "log") Log.Write("Game: " + J.Str(msg, "text", ""));
+            else if (type == "music.prefetch") Prefetch(J.Str(msg, "u", ""));
         }
 
         // ------------------------------------------------------------ Controller: sent to the page whenever it changes
@@ -494,8 +495,38 @@ namespace PowderPulse
             }
         }
 
-        /// <summary>Downloads a whole song from the NAS into memory (one or two at a time, nothing huge).</summary>
+        /// <summary>
+        /// Gives the page a NAS song. If it's the song the page asked to have ready (see Prefetch),
+        /// it's already downloaded or on its way, so the next song starts without a gap.
+        /// </summary>
         private async Task<IRandomAccessStream> FetchSong(string url)
+        {
+            byte[] bytes = null;
+            if (url == prefetchUrl && prefetchTask != null)
+            {
+                var task = prefetchTask;
+                prefetchUrl = null; prefetchTask = null;
+                bytes = await task;
+            }
+            if (bytes == null) bytes = await DownloadSong(url, MaxSongBytes);
+            return bytes == null ? null : await ToStream(bytes);
+        }
+
+        // The page names the song after this one; download it now, while the current one plays.
+        // Only one is kept, and only songs up to 40 MB, to stay well inside the Xbox's memory.
+        private string prefetchUrl;
+        private Task<byte[]> prefetchTask;
+        private void Prefetch(string url)
+        {
+            Uri target;
+            if (string.IsNullOrEmpty(url) || url == prefetchUrl) return;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out target) || !Dlna.Servers.Any(s => string.Equals(s.Host, target.Host, StringComparison.OrdinalIgnoreCase))) return;
+            prefetchUrl = url;
+            prefetchTask = DownloadSong(url, 40L * 1024 * 1024);
+        }
+
+        /// <summary>Downloads a whole song from the NAS into memory (two at a time at most, nothing huge).</summary>
+        private async Task<byte[]> DownloadSong(string url, long maxBytes)
         {
             await songGate.WaitAsync();
             try
@@ -504,25 +535,19 @@ namespace PowderPulse
                 {
                     if (!resp.IsSuccessStatusCode) { Log.Write("NAS song answered " + (int)resp.StatusCode); return null; }
                     long? len = resp.Content.Headers.ContentLength;
-                    if (len.HasValue && len.Value > MaxSongBytes) { Log.Write("Skipped a song over 80 MB"); return null; }
-                    var mem = new InMemoryRandomAccessStream();
+                    if (len.HasValue && len.Value > maxBytes) { if (maxBytes == MaxSongBytes) Log.Write("Skipped a song over 80 MB"); return null; }
                     using (var src = await resp.Content.ReadAsStreamAsync())
+                    using (var mem = new MemoryStream(len.HasValue ? (int)len.Value : 4 * 1024 * 1024))
                     {
                         var buf = new byte[131072];
                         int n;
-                        var writer = new DataWriter(mem);
                         while ((n = await src.ReadAsync(buf, 0, buf.Length)) > 0)
                         {
-                            if (n == buf.Length) writer.WriteBytes(buf);
-                            else { var part = new byte[n]; Array.Copy(buf, part, n); writer.WriteBytes(part); }
-                            await writer.StoreAsync();
-                            if (mem.Size > (ulong)MaxSongBytes) { writer.DetachStream(); mem.Dispose(); return null; }
+                            mem.Write(buf, 0, n);
+                            if (mem.Length > maxBytes) return null;
                         }
-                        await writer.FlushAsync();
-                        writer.DetachStream();
+                        return mem.ToArray();
                     }
-                    mem.Seek(0);
-                    return mem;
                 }
             }
             catch (Exception ex)
@@ -534,6 +559,20 @@ namespace PowderPulse
             {
                 songGate.Release();
             }
+        }
+
+        private static async Task<IRandomAccessStream> ToStream(byte[] bytes)
+        {
+            var mem = new InMemoryRandomAccessStream();
+            using (var writer = new DataWriter(mem))
+            {
+                writer.WriteBytes(bytes);
+                await writer.StoreAsync();
+                await writer.FlushAsync();
+                writer.DetachStream();
+            }
+            mem.Seek(0);
+            return mem;
         }
 
         // a separate client with a long timeout: a big FLAC can take longer than the browse timeout
