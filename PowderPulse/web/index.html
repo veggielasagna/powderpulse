@@ -1067,10 +1067,10 @@ if(bridge){
     if(m.type === 'music.status'){ setStatus(m.text || ''); return; }
     if(m.type === 'music.library' && Array.isArray(m.tracks)){
       Music.setTracks(m.tracks.map(t => ({ title:t.title||'Untitled', url:t.url })), m.source==='usb' ? 'USB DRIVE' : 'MY NAS');
-      setStatus(`${m.tracks.length} songs found.`);
+      setStatus(`${m.tracks.length.toLocaleString()} songs ready, shuffled.`);
     }
   });
-  $('musicNote').textContent = 'Plug in a USB drive with music and choose Find my music. The game plays the songs itself, so it can reshape them as you ride.';
+  $('musicNote').textContent = 'Your NAS music loads by itself when the game starts. Choose Find my music to look again, for example after plugging in a USB drive.';
   $('btnNas').textContent = 'FIND MY MUSIC';
   $('btnFiles').hidden = true; $('btnFolder').hidden = true; $('urlRow').hidden = true;
 } else {
@@ -1078,6 +1078,7 @@ if(bridge){
   $('musicNote').textContent = 'Pick songs from a USB drive or this device. On the Xbox build, Find my NAS appears here and pulls your library over DLNA, the same way WMC SX does.';
 }
 $('btnNas').addEventListener('click', () => { setStatus('Looking for music…'); bridge.postMessage(JSON.stringify({ type:'music.requestLibrary', sources:['dlna','usb'] })); });
+if(bridge){ $('srcLbl').textContent = 'FINDING…'; bridge.postMessage(JSON.stringify({ type:'music.requestLibrary', sources:['dlna','usb'], quiet:true })); setTimeout(() => { if($('srcLbl').textContent === 'FINDING…') $('srcLbl').textContent = 'DEMO TRACK'; }, 20000); }
 $('btnDemo').addEventListener('click', async () => { if(Music.ctx) await Music.useDemo(); else { Music.tracks=[]; $('srcLbl').textContent='DEMO TRACK'; $('trackList').textContent='Demo track'; } });
 $('btnFiles').addEventListener('click', () => $('fileIn').click());
 $('btnFolder').addEventListener('click', () => $('folderIn').click());

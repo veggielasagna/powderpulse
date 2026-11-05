@@ -56,6 +56,9 @@
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\Dlna.cs" />
+    <Compile Include="Services\J.cs" />
+    <Compile Include="Services\Log.cs" />
   </ItemGroup>
   <ItemGroup>
     <AppxManifest Include="Package.appxmanifest">
@@ -88,7 +91,11 @@
       <Version>6.2.14</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.UI.Xaml">
-      <Version>2.8.6</Version>
+      <Version>2.8.7</Version>
+    </PackageReference>
+    <!-- Required on Xbox: without it the console reports "WebView2 runtime not detected". -->
+    <PackageReference Include="Microsoft.Web.WebView2">
+      <Version>1.0.4078.44</Version>
     </PackageReference>
   </ItemGroup>
   <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">
