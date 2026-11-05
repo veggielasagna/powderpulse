@@ -114,6 +114,8 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
 .status{font-size:13px;color:var(--amber);min-height:1.2em;font-weight:500}
 .panel.lib{max-width:920px;height:min(92vh,980px);gap:12px}
 .libhead{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px}
+.shuf{font-size:11px;padding:6px 12px}
+.shuf[aria-pressed="true"]{border-color:var(--amber);color:var(--amber)}
 .queue{font-size:12px;font-weight:500;color:var(--dim);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tabs{display:flex;flex-wrap:wrap;gap:6px}
 .tabs button{font-size:12px;padding:7px 14px}
@@ -137,7 +139,6 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
 .tb.on{background:rgba(232,236,245,.25)}
 @media (prefers-reduced-motion:reduce){button,.popup{transition:none}}
 </style>
-
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -210,7 +211,7 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
 <div class="screen" id="scrMusic" hidden>
   <div class="panel lib">
     <div class="tape"></div>
-    <div class="libhead"><h2>Your music</h2><div class="queue" id="queueLbl">Up next: demo track</div></div>
+    <div class="libhead"><h2>Your music</h2><div class="queue" id="queueLbl">Up next: demo track</div><button class="shuf" id="btnShuffle" aria-pressed="true">SHUFFLE ON</button></div>
     <p id="musicNote">Pick songs from a USB drive or this device. The game plays them itself, so it can reshape them as you ride.</p>
     <div class="row" id="srcRow">
       <button id="btnNas">FIND MY MUSIC</button>
@@ -1650,16 +1651,39 @@ function setLibrary(songs, source){
   setStatus(`${songs.length.toLocaleString()} songs ${source === 'nas' ? 'on your NAS' : source === 'usb' ? 'on USB' : 'ready'}.`);
   // pick what plays without cutting off a song that's already playing
   const mode = store('pp_mode') || 'all';
-  if(mode === 'playlist' && Playlist.list.length) queueSongs(Playlist.list, 'MY PLAYLIST', true, false, 'playlist');
-  else queueSongs(songs, 'ALL MY MUSIC', true, false, 'all');
+  if(mode === 'playlist' && Playlist.list.length) queueSongs(Playlist.list, 'MY PLAYLIST', shuffleOn, false, 'playlist');
+  else queueSongs(songs, 'ALL MY MUSIC', shuffleOn, false, 'all');
   if(!$('scrMusic').hidden) renderLib();
 }
+let shuffleOn = store('pp_shuffle') !== 'off';
+let queueBase = null;            // what's queued, in its own order, so Shuffle can be switched mid-song
 function queueSongs(list, label, shuffle, now, mode){
   if(!list.length) return;
+  queueBase = { list: list.slice(), label };
   const arr = shuffle ? shuffled(list) : list.slice();
   Music.setTracks(arr.map(toTrack), label + (shuffle ? ' · SHUFFLED' : ''), now);
   if(mode) store('pp_mode', mode);
 }
+function renderShuffle(){ const b = $('btnShuffle'); b.textContent = shuffleOn ? 'SHUFFLE ON' : 'SHUFFLE OFF'; b.setAttribute('aria-pressed', String(shuffleOn)); }
+// Switching shuffle keeps the current song playing and reorders what comes after it
+function setShuffle(on){
+  shuffleOn = on; store('pp_shuffle', on ? 'on' : 'off'); renderShuffle();
+  if(!queueBase) return;
+  const cur = Music.tracks[Music.idx] || null, curKey = cur && cur.key;
+  const at = curKey ? queueBase.list.findIndex(s => s.k === curKey) : -1;
+  let order;
+  if(at < 0) order = on ? shuffled(queueBase.list) : queueBase.list.slice();
+  else {
+    const rest = queueBase.list.slice(at+1).concat(queueBase.list.slice(0, at));
+    order = [queueBase.list[at]].concat(on ? shuffled(rest) : rest);
+  }
+  const playing = Music.playing && Music.el && !Music.el.paused && at >= 0;
+  Music.setTracks(order.map(toTrack), queueBase.label + (on ? ' · SHUFFLED' : ''), false);
+  if(playing) Music.idx = 0;       // the song that's playing is first in the new order
+  setStatus(on ? 'Shuffle on. Upcoming songs are mixed up.' : 'Shuffle off. Songs play in order.');
+}
+$('btnShuffle').addEventListener('click', () => setShuffle(!shuffleOn));
+renderShuffle();
 function groupsFor(tab){
   if(Lib.groups[tab]) return Lib.groups[tab];
   const field = { artists:'a', albums:'l', genres:'g', years:'y' }[tab];
@@ -1700,8 +1724,7 @@ function renderLib(){
     const label = currentLabel();
     const mode = tab==='playlist' && !Lib.drill ? 'playlist' : !Lib.drill && !q ? 'all' : 'custom';
     if(songs.length){
-      actions.push(['PLAY', () => { queueSongs(songs, label, false, true, mode); afterQueue(); }, 'primary']);
-      actions.push(['SHUFFLE', () => { queueSongs(songs, label, true, true, mode); afterQueue(); }]);
+      actions.push([tab==='playlist' && !Lib.drill ? 'PLAY PLAYLIST' : 'PLAY', () => { queueSongs(songs, label, shuffleOn, true, mode); afterQueue(); }, 'primary']);
       if(!(tab==='playlist' && !Lib.drill)) actions.push([`ADD ${songs.length > 1 ? 'ALL ' + songs.length.toLocaleString() : 'IT'} TO PLAYLIST`, () => { Playlist.addAll(songs); renderLib(); setStatus(`Playlist has ${Playlist.list.length} songs.`); }]);
       else actions.push(['CLEAR PLAYLIST', clearPlaylist]);
     }
@@ -1728,12 +1751,15 @@ function afterQueue(){ setStatus(`Up next: ${Music.source}`); }
 function libActivate(el, playNow){
   const r = libRows[+el.dataset.r]; if(!r) return;
   if(r.group){
-    if(playNow){ queueSongs(r.group.songs, labelFor(r.group.name), false, true, 'custom'); afterQueue(); return; }
+    if(playNow){ queueSongs(r.group.songs, labelFor(r.group.name), shuffleOn, true, 'custom'); afterQueue(); return; }
     Lib.drill = { name:r.group.name, songs:r.group.songs, label:labelFor(r.group.name) }; $('libSearch').value = ''; menuFocus = 0; renderLib(); return;
   }
   if(playNow){
-    const rest = r.list.slice(r.index).concat(r.list.slice(0, r.index));
-    Music.setTracks(rest.map(toTrack), currentLabel(), true);
+    // play this song now; the rest follows in order, or mixed up when Shuffle is on
+    const rest = r.list.slice(r.index+1).concat(r.list.slice(0, r.index));
+    queueBase = { list: [r.song].concat(rest), label: currentLabel() };
+    const order = [r.song].concat(shuffleOn ? shuffled(rest) : rest);
+    Music.setTracks(order.map(toTrack), currentLabel() + (shuffleOn ? ' · SHUFFLED' : ''), true);
     afterQueue(); return;
   }
   Playlist.toggle(r.song);
@@ -2111,7 +2137,10 @@ function togglePause(){
 }
 async function begin(btn, fn){
   btn.disabled = true;
-  try{ await Music.ensure(); Music.play(); } catch(e){ console.warn(e); }
+  try{
+    await Promise.race([Music.ensure(), new Promise(r => setTimeout(r, 3000))]);
+    Music.play();
+  } catch(e){ reportError('Music couldn\u2019t start: ' + (e && e.message || e)); }
   btn.disabled = false;
   fn();
 }

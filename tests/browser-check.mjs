@@ -87,5 +87,21 @@ for (const [mode, button, viewport] of [
   if(titleTrees !== 0 || rideTrees !== 0 || back.trees === 0 || !(z2 > back.z) || problems.length) failed = true;
   await page.close();
 }
+// Shuffle switch: on by default, turning it off is remembered after a reload
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const problems = [];
+  page.on('pageerror', e => problems.push('PAGE ERROR: ' + (e.stack || e.message)));
+  await page.goto(base); await page.waitForTimeout(2000);
+  const before = await page.getAttribute('#btnShuffle', 'aria-pressed');
+  await page.evaluate(() => document.getElementById('btnShuffle').click()); await page.waitForTimeout(200);
+  const label = await page.textContent('#btnShuffle');
+  await page.reload(); await page.waitForTimeout(2000);
+  const after = await page.getAttribute('#btnShuffle', 'aria-pressed');
+  console.log(`== shuffle: default ${before}, switched to "${label}", after reload ${after}`);
+  problems.forEach(p => console.log('   ' + p.split('\n').slice(0,6).join('\n      ')));
+  if(before !== 'true' || after !== 'false' || !/OFF/.test(label) || problems.length) failed = true;
+  await page.close();
+}
 await browser.close();
 console.log(failed ? 'RESULT: PROBLEMS FOUND' : 'RESULT: ALL MODES RUN');
