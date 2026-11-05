@@ -13,6 +13,12 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 - Don't commit home-network details (NAS names, IPs); the repo may be public.
 - Log: `LocalState\powderpulse_log.txt` (Device Portal → File explorer).
 
+## Game structure (index.html)
+- Modes: `run` (roguelite), `free` (endless mountains), `skate` (endless snowskate street spots). `isFree()` is true for free and skate.
+- Terrain: `groundH` = slope + noise + side walls + kickers (16 m buckets in `c.kb`) − drops (cliffs, pitches, stair sets; prefix sums in `c.drops`, built by `indexCourse`). `groundFast` reads the height grid sampled for the terrain mesh (particles, tracks). Snowskate rails are polylines `{kind, x, w, h, pts:[{z,y}]}` read with `railAt`.
+- Controls: X/B/LB/RB are one set of trick buttons: snowboard grabs (Indy/Method/Tail/Nose) in the air, LB/RB presses and butters on the snow; snowskate flips (Kickflip/Heelflip/Shove-it/Tre). Stick up/down = flips (snowboard air) or manuals (snowskate ground).
+- Performance: adaptive resolution (`adaptResolution`), crystals updated only near the rider (`flakeWindow`), audio automation only when a target moves (`Music.set`).
+
 ## Build
 Push to `main` → `.github/workflows/build.yml` on windows-2022 → artifact `Powder-Pulse-1.0.<run>.0-install` (sideload .msix + dependency .appx files + HOW-TO-INSTALL.txt). Same pipeline as WMC SX. Nothing compiles locally; CI is the compile check.
 

@@ -56,6 +56,9 @@ canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block}
 .eq i{width:3px;border-radius:2px;height:10%;background:var(--teal);opacity:.75}
 .fx{display:none}
 
+.balance{position:fixed;left:50%;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(220px,50vw);height:4px;border-radius:2px;background:var(--line);pointer-events:none}
+.balance::before{content:"";position:absolute;left:35%;right:35%;top:0;bottom:0;background:rgba(159,207,176,.35);border-radius:2px}
+.balance i{position:absolute;top:-4px;width:4px;height:12px;margin-left:-2px;border-radius:2px;background:var(--snow);left:50%}
 .popup{position:fixed;left:50%;top:26%;transform:translate(-50%,-50%) translateY(6px);text-align:center;pointer-events:none;opacity:0;transition:opacity .35s,transform .35s}
 .popup.show{opacity:1;transform:translate(-50%,-50%)}
 .popup .t{font-size:clamp(22px,3.6vw,38px);font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--snow);text-shadow:0 2px 18px rgba(15,18,34,.6);text-wrap:balance}
@@ -147,6 +150,7 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
     </div></div>
   </div>
 </div>
+<div class="balance" id="balance" hidden><i id="balMark"></i></div>
 <div class="popup" id="popup"><div class="t" id="popT"></div><div class="s" id="popS"></div></div>
 
 <div class="touch" id="touch" hidden>
@@ -166,16 +170,18 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
   <div class="panel">
     <div class="tape"></div>
     <div class="logo">Powder<span>Pulse</span></div>
-    <p>Drop In for a roguelite run: clear peaks, pick upgrades, don't run out of hearts. Free Ride is endless mountains with no pressure. Either way your music bends with the ride.</p>
+    <p>Drop In for a roguelite run: clear peaks, pick upgrades, don't run out of hearts. Free Ride is endless mountains with no pressure. Snowskate takes a bindingless deck into snowy streets full of rails, ledges and stairs. Your music bends with every ride.</p>
     <div class="row">
       <button class="primary" id="btnStart">DROP IN</button>
       <button class="primary" id="btnFree">FREE RIDE</button>
+      <button class="primary" id="btnSkate">SNOWSKATE</button>
       <button id="btnMusic">MUSIC: <span id="srcLbl">DEMO TRACK</span></button>
     </div>
     <div class="meta"><span>Best run <b id="bestLbl">0</b></span><span>Best peak <b id="bestPeakLbl">0</b></span></div>
     <div class="keys">
-      <b>Controller</b> left stick steer · stick down tuck · A jump (tap at the lip for extra pop) · in the air: stick spins and flips, hold X Indy grab, hold B Method · RT tuck · Y next song · Menu pause<br>
-      <b>Keyboard</b> arrows / WASD · Space jump · J Indy · K Method · Shift tuck · N next song · Esc pause
+      <b>Snowboard</b> left stick steer · stick down tuck · A jump (tap at the lip for extra pop) · in the air: stick spins and flips; hold X Indy, B Method, LB Tail, RB Nose · on the snow: hold LB/RB to press, steer while pressing to butter · RT tuck · Y next song · Menu pause<br>
+      <b>Snowskate</b> RT push · A ollie onto rails and ledges · X kickflip · B heelflip · LB shove-it · RB tre flip · stick up/down manual · stick left/right to balance grinds<br>
+      <b>Keyboard</b> arrows / WASD · Space jump · J K Q E tricks and grabs · Shift tuck or push · N next song · Esc pause
     </div>
   </div>
 </div>
@@ -284,11 +290,12 @@ function makeNoise(seed){
 const W = 90;
 const G = 24;
 let course = null;
-function genCourse(peak, seed, free=false){
+function genCourse(peak, seed, free=false, skate=false){
+  if(skate) return genSkateSpot(peak, seed);
   const rng = mulberry32(seed);
   const L = free ? 3600 : 900 + peak*250;
   const diff = free ? 2 : peak;
-  const c = { peak, seed, free, L, grade: 0.26 + Math.min(diff,6)*0.02, n: makeNoise(seed), kickers:[], cliffs:[], pitches:[], trees:[], flakes:[], rocks:[], boards:[], rng };
+  const c = { peak, seed, free, L, grade: 0.26 + Math.min(diff,6)*0.02, bumpy:1, n: makeNoise(seed), kickers:[], cliffs:[], pitches:[], stairs:[], rails:[], trees:[], flakes:[], rocks:[], rng };
   course = c;
   let z = 90;
   while(z < L-140){
@@ -312,6 +319,7 @@ function genCourse(peak, seed, free=false){
       z += 70 + rng()*30;
     } else z += 55;                     // open snow
   }
+  indexCourse(c);
   const treeCount = Math.round(L*0.16*(1+Math.min(diff,6)*0.25));
   for(let i=0;i<treeCount;i++){
     const x = (rng()*2-1)*(W/2-4), tz = 70 + rng()*(L-90);
@@ -329,7 +337,6 @@ function genCourse(peak, seed, free=false){
   for(let i=0;i<L*0.12;i++){ const side = rng()<.5?-1:1; c.trees.push({ x: side*(W/2+2+rng()*22), z: rng()*(L+120)-20, s:0.9+rng()*0.9, deco:true }); }
   c.trees.sort((a,b)=>a.z-b.z);
   for(let i=0;i<L*0.05;i++){ const side = rng()<.5?-1:1; c.rocks.push({ x: side*(W/2-8+rng()*16), z: rng()*L, s:1+rng()*2.2, r:rng()*TAU }); }
-  for(let z2=110; z2<L-40; z2+=95+rng()*70){ c.boards.push({ x:(rng()<.5?-1:1)*(W/2-13), z:z2, tag:(rng()*99)|0 }); }
   // crystals follow the real flight path off each kicker
   for(const k of c.kickers){
     const arc = simJump(k.x, k.z - (k.mega ? 30 : 20), k.mega ? 30 : 26, k.mega ? 0.24 : 0.18);
@@ -341,30 +348,143 @@ function genCourse(peak, seed, free=false){
     for(let i=0;i<6;i++){ const zz=fz+i*5, xx=x+sway*i*5; if(!nearTree(c, xx, zz, 3)) c.flakes.push({ x:xx, z:zz, y:groundH(xx,zz)+1.2, got:false }); }
     fz += 70 + rng()*60;
   }
+  c.flakes.sort((a,b) => a.z - b.z);
+  c.flakeZ = Float32Array.from(c.flakes, f => f.z);
   c.yTop = groundH(0, 0); c.yEnd = groundH(0, L);
   return c;
 }
+function groundFast(x, z){
+  const g = course && course.hg; if(!g) return groundH(x, z);
+  const fx = (x-g.x0)/g.dx, fz = (z-g.z0)/g.dz;
+  const ix = Math.max(0, Math.min(g.nx-2, fx|0)), iz = Math.max(0, Math.min(g.nz-2, fz|0)), tx = clamp(fx-ix,0,1), tz = clamp(fz-iz,0,1);
+  const r0 = iz*g.nx + ix, r1 = r0 + g.nx;
+  return lerp(lerp(g.y[r0], g.y[r0+1], tx), lerp(g.y[r1], g.y[r1+1], tx), tz);
+}
 function nearTree(c,x,z,r){ for(const t of c.trees){ if(Math.abs(t.z-z)<r && Math.abs(t.x-x)<r) return true; } return false; }
+/* ---------- Snowskate spot: a snowy street that steps down between buildings ----------
+   Long ledges along the storefronts, benches, flat bars, small launch ramps, and stair sets with
+   straight or kinked handrails. Rails are polylines {x, w, h, pts:[{z,y}]} grinded along +z. */
+function genSkateSpot(peak, seed){
+  const rng = mulberry32(seed);
+  const L = 1100;
+  const c = { peak, seed, free:true, skate:true, L, grade:0.09, bumpy:0.16, n: makeNoise(seed), kickers:[], cliffs:[], pitches:[], stairs:[], rails:[], trees:[], flakes:[], rocks:[], buildings:[], lamps:[], rng };
+  course = c;
+  let z = 45;
+  while(z < L-70){
+    const r = rng();
+    if(r < 0.24){                                         // stair set with handrails, sometimes kinked
+      const n = 5 + (rng()*5|0), len = n*1.05, d = n*0.36;
+      c.stairs.push({ z, len, d, n });
+      let end = z + len, pz;
+      if(rng() < 0.4){
+        const n2 = 4 + (rng()*3|0), len2 = n2*1.05, gap = 3.2;
+        c.stairs.push({ z:end+gap, len:len2, d:n2*0.36, n:n2 });
+        pz = [z-1.6, z+0.15, end+0.25, end+gap-0.1, end+gap+len2+0.9];
+        end += gap + len2;
+      } else pz = [z-1.6, z+0.15, end+0.9];
+      const xs = rng() < 0.5 ? [-3.4, 3.4] : [(rng()<.5?-1:1)*(2.5+rng()*4)];
+      for(const x of xs) c.rails.push({ kind:'rail', x, w:0.05, h:0.86, pz });
+      z = end + 32;
+    } else if(r < 0.48){                                  // long ledges along the storefronts
+      const side = rng() < .5 ? -1 : 1, x = side*(9 + rng()*13), len = 14 + rng()*16;
+      c.rails.push({ kind:'ledge', x, w:0.34, h:0.5, pz:[z, z+len] });
+      if(rng() < 0.5){ const len2 = len*0.7; c.rails.push({ kind:'ledge', x:-x*0.55, w:0.34, h:0.42, pz:[z+7, z+7+len2] }); }
+      z += len + 24;
+    } else if(r < 0.64){                                  // flat bar in the open
+      const x = (rng()-.5)*16, len = 8 + rng()*9;
+      c.rails.push({ kind:'rail', x, w:0.05, h:0.55, pz:[z, z+len] });
+      z += len + 22;
+    } else if(r < 0.78){                                  // a row of benches
+      const x = (rng()<.5?-1:1)*(6 + rng()*14);
+      for(let i=0;i<3;i++) c.rails.push({ kind:'bench', x, w:0.3, h:0.46, pz:[z+i*7.5, z+i*7.5+3.4] });
+      z += 32;
+    } else if(r < 0.92){                                  // small launch ramp for flip tricks
+      c.kickers.push({ z, x:(rng()-.5)*20, len:4.5, h:1.0+rng()*0.5, w:2.6 });
+      z += 30;
+    } else z += 22;
+  }
+  indexCourse(c);
+  for(const r of c.rails){
+    // ledges and benches sit on the snow, so they follow it in short pieces; rails stay straight between their posts
+    if(r.kind !== 'rail'){ const z0 = r.pz[0], z1 = r.pz[r.pz.length-1], n = Math.max(1, Math.round((z1-z0)/3)); r.pz = Array.from({length:n+1}, (_,i) => z0 + (z1-z0)*i/n); }
+    r.pts = r.pz.map(zz => ({ z:zz, y: groundH(r.x, zz) + r.h })); r.z0 = r.pz[0]; r.z1 = r.pz[r.pz.length-1];
+  }
+  c.rails.sort((a,b) => a.z0 - b.z0);
+  // buildings line both sides; lamps on the sidewalks
+  for(const side of [-1,1]){
+    let bz = -30;
+    while(bz < L+60){ const w = 12 + rng()*16; c.buildings.push({ side, z:bz + w/2, w, d:10 + rng()*8, h:12 + rng()*30, kind:(rng()*3)|0, lit:(rng()*2)|0 }); bz += w + 0.6 + rng()*3; }
+    for(let lz = 10 + rng()*10; lz < L+40; lz += 20 + rng()*8) c.lamps.push({ x: side*29.5, z: lz });
+  }
+  // crystals hover over the rails and ledges, so grinding a line collects them
+  for(const r of c.rails) for(let zz = r.z0 + 0.8; zz < r.z1 - 0.5; zz += 2.2) c.flakes.push({ x:r.x, z:zz, y:railAt(r, zz).y + 0.9, got:false });
+  for(let fz = 60; fz < L-40; fz += 90 + rng()*60){
+    const x = (rng()-.5)*24;
+    for(let i=0;i<5;i++) c.flakes.push({ x, z:fz+i*4, y:groundH(x, fz+i*4) + 1.0, got:false });
+  }
+  c.flakes.sort((a,b) => a.z - b.z);
+  c.flakeZ = Float32Array.from(c.flakes, f => f.z);
+  c.yTop = groundH(0, 0); c.yEnd = groundH(0, L);
+  return c;
+}
+function railAt(r, z){
+  const p = r.pts;
+  for(let i=0;i<p.length-1;i++){
+    if(z <= p[i+1].z || i === p.length-2){
+      const t = clamp((z - p[i].z)/(p[i+1].z - p[i].z), 0, 1);
+      return { y: lerp(p[i].y, p[i+1].y, t), slope: (p[i+1].y - p[i].y)/(p[i+1].z - p[i].z) };
+    }
+  }
+  return { y: p[0].y, slope: 0 };
+}
+
+/* Terrain features are indexed once per course so each height lookup only touches what's nearby:
+   kickers (and cliff lips) sit in 16 m buckets; drops (cliffs, steep pitches, stair sets) never
+   un-drop, so everything fully behind you is one prefix sum found by binary search. */
+const BUCKET = 16;
+function indexCourse(c){
+  const bumps = c.kickers.map(k => ({ z:k.z, len:k.len, x:k.x, w:k.w, h:k.h }));
+  for(const cl of c.cliffs) if(cl.kick) bumps.push({ z:cl.z-5, len:5, h:1.1, full:true });
+  c.kb = new Map();
+  for(const b of bumps){
+    for(let i=Math.floor(b.z/BUCKET); i<=Math.floor((b.z+b.len)/BUCKET); i++){ if(!c.kb.has(i)) c.kb.set(i, []); c.kb.get(i).push(b); }
+  }
+  const drops = [];
+  for(const cl of c.cliffs) drops.push({ z0:cl.z, z1:cl.z+1.5, d:cl.d, shape:0 });
+  for(const p of c.pitches) drops.push({ z0:p.z, z1:p.z+p.len, d:p.d, shape:1 });
+  for(const s of (c.stairs || [])) drops.push({ z0:s.z, z1:s.z+s.len, d:s.d, shape:2, n:s.n });
+  drops.sort((a,b) => a.z0 - b.z0);
+  c.drops = drops; c.dropPre = [0]; c.dropMax = 0;
+  for(const d of drops){ c.dropPre.push(c.dropPre[c.dropPre.length-1] + d.d); c.dropMax = Math.max(c.dropMax, d.z1 - d.z0); }
+}
+function dropShape(d, t){
+  if(t >= 1) return 1;
+  if(d.shape === 0) return t;
+  if(d.shape === 1) return t*t*(3-2*t);
+  const s = t*d.n, k = Math.floor(s), f = s - k;                 // stairs: flat treads, quick risers
+  return (k + (f > 0.82 ? (f-0.82)/0.18 : 0)) / d.n;
+}
+function dropAt(c, z){
+  const a = c.drops; let lo = 0, hi = a.length;
+  while(lo < hi){ const m = (lo+hi)>>1; if(a[m].z0 < z) lo = m+1; else hi = m; }
+  let total = c.dropPre[lo];                                     // every drop that has started
+  for(let j=lo-1; j>=0 && z - a[j].z0 < c.dropMax; j--){ const d = a[j]; if(z < d.z1) total -= d.d*(1 - dropShape(d, (z-d.z0)/(d.z1-d.z0))); }
+  return total;
+}
 function groundH(x, z){
   const c = course;
-  let h = -z*c.grade;
-  h += c.n(x*0.025, z*0.02)*5 + c.n(x*0.08+50, z*0.08)*1.2;
+  let h = -z*c.grade + c.n(x*0.025, z*0.02)*5*c.bumpy + c.n(x*0.08+50, z*0.08)*1.2*c.bumpy;
   const ax = Math.abs(x), e = W/2-12;
-  if(ax > e){ const d = ax-e; h += d*d*0.09; }
-  for(let i=0;i<c.kickers.length;i++){
-    const k = c.kickers[i], t = (z-k.z)/k.len;
-    if(t>0 && t<1){ const dx = Math.abs(x-k.x); if(dx < k.w){ const f = dx < k.w-2 ? 1 : (k.w-dx)/2; h += k.h*t*t*f; } }
+  if(ax > e){ const d = ax-e; h += d*d*(c.skate ? 0.004 : 0.09); }   // mountains have steep side walls; streets stay flat to the buildings
+  const b = c.kb.get(Math.floor(z/BUCKET));
+  if(b) for(let i=0;i<b.length;i++){
+    const k = b[i], t = (z-k.z)/k.len;
+    if(t>0 && t<1){
+      if(k.full){ h += k.h*t*t; continue; }
+      const dx = Math.abs(x-k.x); if(dx < k.w){ const f = dx < k.w-2 ? 1 : (k.w-dx)/2; h += k.h*t*t*f; }
+    }
   }
-  for(let i=0;i<c.cliffs.length;i++){
-    const cl=c.cliffs[i];
-    if(z>cl.z) h -= cl.d*Math.min(1,(z-cl.z)/1.5);
-    else if(cl.kick && z>cl.z-5){ const t=(z-(cl.z-5))/5; h += 1.1*t*t; }
-  }
-  for(let i=0;i<c.pitches.length;i++){
-    const p=c.pitches[i];
-    if(z>p.z){ const t=Math.min(1,(z-p.z)/p.len); h -= p.d*t*t*(3-2*t); }
-  }
-  return h;
+  return h - dropAt(c, z);
 }
 /* Ride a straight line at a fixed speed and record where you fly after the first real takeoff */
 function simJump(x, z, v, every){
@@ -387,7 +507,9 @@ function simJump(x, z, v, every){
 /* ---------- Renderer ---------- */
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:false, powerPreference:'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.75));
+const PR_MAX = Math.min(window.devicePixelRatio||1, 1.75);
+let pixelRatio = PR_MAX;
+renderer.setPixelRatio(pixelRatio);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(66, 1, 0.3, 900);
 
@@ -552,6 +674,67 @@ const flakeMat = new THREE.MeshBasicMaterial({ color:0xffffff });
 function disposeCourse(g){ g.traverse(o => { if(o.userData.own && o.geometry) o.geometry.dispose(); }); scene.remove(g); }
 function addOwn(parent, obj){ obj.userData.own = true; parent.add(obj); return obj; }
 
+/* street props for snowskate spots */
+const windowTex = [0, 1].map(v => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'), r = mulberry32(31+v);
+  g.fillStyle = '#000'; g.fillRect(0,0,128,128);
+  for(let y=0;y<2;y++) for(let x=0;x<2;x++){
+    const lit = r() < (v ? 0.55 : 0.35);
+    g.fillStyle = lit ? (r() < .5 ? '#f2c98a' : '#e8b073') : '#1c2140';
+    g.fillRect(x*64+14, y*64+12, 36, 40);
+  }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+});
+const facadeMats = windowTex.map(t => new THREE.MeshBasicMaterial({ map:t, transparent:false }));
+const buildingMats = [toonMat(0x5a3a44, 0x2f1e2a, { th:0.2 }), toonMat(0x4a4f6e, 0x262a40, { th:0.2 }), toonMat(0x6b5a52, 0x3a2f30, { th:0.2 })];
+const roofSnowMat = toonMat(0xd6dcee, 0x6f78a6, { th:0.2 });
+const railMat = toonMat(0xa9b1d1, 0x50577e, { th:0.15, spec:0.5 });
+const ledgeMat = toonMat(0x7c829e, 0x41465f, { th:0.2 });
+const benchMat = toonMat(0x8a6a52, 0x4a3628, { th:0.2 });
+const lampMat = toonMat(0x2a2e44, 0x161a29, { th:0.2 });
+const lampGlowMat = new THREE.SpriteMaterial({ map: (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'); const gr = g.createRadialGradient(32,32,2,32,32,32); gr.addColorStop(0,'rgba(255,226,170,1)'); gr.addColorStop(0.25,'rgba(255,210,150,.55)'); gr.addColorStop(1,'rgba(255,200,140,0)'); g.fillStyle = gr; g.fillRect(0,0,64,64); return new THREE.CanvasTexture(cv); })(), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending });
+const LAMP_POLE = new THREE.CylinderGeometry(0.08, 0.1, 4.6, 6), LAMP_HEAD = new THREE.BoxGeometry(0.5, 0.18, 0.5), RAIL_POST = new THREE.CylinderGeometry(0.04, 0.04, 1, 6);
+function buildSkateProps(c){
+  // grind rails, ledges and benches, segment by segment along their polylines
+  for(const r of c.rails){
+    for(let i=0;i<r.pts.length-1;i++){
+      const a = r.pts[i], b = r.pts[i+1], len = Math.hypot(b.z-a.z, b.y-a.y), pitch = Math.atan2(b.y-a.y, b.z-a.z);
+      const mid = new THREE.Vector3(r.x, (a.y+b.y)/2, (a.z+b.z)/2);
+      if(r.kind === 'rail'){
+        const g = new THREE.CylinderGeometry(0.055, 0.055, len, 8); g.rotateX(Math.PI/2);
+        const m = addOwn(courseGroup, new THREE.Mesh(g, railMat)); m.position.copy(mid); m.rotation.x = -pitch;
+        const o = addOwn(courseGroup, new THREE.Mesh(hullGeo(g, 0.03), inkMat)); o.position.copy(mid); o.rotation.x = -pitch;
+        for(let zz = a.z; zz <= b.z + 0.01; zz += 2.4){
+          const top = railAt(r, zz).y, gy = groundH(r.x, zz), post = new THREE.Mesh(RAIL_POST, railMat);
+          post.scale.y = Math.max(0.2, top - gy); post.position.set(r.x, (top + gy)/2, zz); courseGroup.add(post);
+        }
+      } else {
+        const tall = r.h + 0.6, g = new THREE.BoxGeometry(r.w*2, tall, len);
+        const m = addOwn(courseGroup, new THREE.Mesh(g, r.kind === 'bench' ? benchMat : ledgeMat));
+        m.position.set(r.x, mid.y - tall/2, mid.z); m.rotation.x = -pitch;
+        const o = addOwn(courseGroup, new THREE.Mesh(hullGeo(g, 0.04), inkMat)); o.position.copy(m.position); o.rotation.x = -pitch;
+        if(r.kind === 'ledge'){ const s = addOwn(courseGroup, new THREE.Mesh(new THREE.BoxGeometry(r.w*2+0.04, 0.05, len), roofSnowMat)); s.position.set(r.x, mid.y + 0.02, mid.z); s.rotation.x = -pitch; }
+      }
+    }
+  }
+  // buildings: a lit facade facing the street, snow on the roof
+  for(const bd of c.buildings){
+    const fx = bd.side*36, gy = Math.min(groundH(fx, bd.z - bd.w/2), groundH(fx, bd.z + bd.w/2)) - 2;
+    const g = new THREE.BoxGeometry(bd.d, bd.h + 2, bd.w);
+    const m = addOwn(courseGroup, new THREE.Mesh(g, buildingMats[bd.kind])); m.position.set(fx + bd.side*bd.d/2, gy + (bd.h+2)/2, bd.z);
+    const roof = addOwn(courseGroup, new THREE.Mesh(new THREE.BoxGeometry(bd.d+0.3, 0.35, bd.w+0.3), roofSnowMat)); roof.position.set(m.position.x, gy + bd.h + 2.15, bd.z);
+    const fg = new THREE.PlaneGeometry(bd.w - 1, bd.h - 3);
+    const uv = fg.attributes.uv; for(let i=0;i<uv.count;i++) uv.setXY(i, uv.getX(i)*(bd.w-1)/7, uv.getY(i)*(bd.h-3)/7);
+    const f = addOwn(courseGroup, new THREE.Mesh(fg, facadeMats[bd.lit])); f.position.set(fx - bd.side*0.02, gy + 2 + 1 + (bd.h-3)/2 + 0.6, bd.z); f.rotation.y = -bd.side*Math.PI/2;
+  }
+  // street lamps with a warm glow
+  for(const l of c.lamps){
+    const gy = groundH(l.x, l.z);
+    const pole = new THREE.Mesh(LAMP_POLE, lampMat); pole.position.set(l.x, gy + 2.3, l.z); courseGroup.add(pole);
+    const head = new THREE.Mesh(LAMP_HEAD, lampMat); head.position.set(l.x, gy + 4.6, l.z); courseGroup.add(head);
+    const glow = new THREE.Sprite(lampGlowMat); glow.scale.setScalar(3.4); glow.position.set(l.x, gy + 4.35, l.z); courseGroup.add(glow);
+  }
+}
 const POST_SM = new THREE.CylinderGeometry(0.22, 0.22, 7.2, 8), POST_LG = new THREE.CylinderGeometry(0.4, 0.4, 10, 8);
 function buildCourseMeshes(){
   if(courseGroup) disposeCourse(courseGroup);
@@ -582,6 +765,9 @@ function buildCourseMeshes(){
     if(Math.abs(z-c.L)<2.5 && ax<W/2-10){ const s = Math.floor(x/2.5+100)%2===0 ^ (z>c.L); r=s?1:.35; g=s?1:.38; b=s?1:.58; }
     cols[i*3]=r; cols[i*3+1]=g; cols[i*3+2]=b;
   }
+  // keep the sampled heights: snow particles and tracks read this grid instead of recomputing noise
+  c.hg = { x0:-(W+90)/2, z0:-80, dx:(W+90)/segX, dz:lenZ/segZ, nx:segX+1, nz:segZ+1, y:new Float32Array(pos.count) };
+  for(let i=0;i<pos.count;i++){ const ix = i % (segX+1), iz = (i/(segX+1))|0; c.hg.y[iz*(segX+1)+ix] = pos.getY(i); }
   geo.computeVertexNormals();
   // anything too steep to hold snow (cliff faces, ramp sides) shows bare purple rock
   const nrm = geo.attributes.normal;
@@ -605,6 +791,8 @@ function buildCourseMeshes(){
     const lip = addOwn(courseGroup, new THREE.Mesh(new THREE.BoxGeometry(k.w*2-1, 0.1, 0.22), new THREE.MeshBasicMaterial({color:INK})));
     lip.position.set(k.x, groundH(k.x, k.z+k.len-0.05)+0.06, k.z+k.len-0.05);
   });
+
+  if(c.skate) buildSkateProps(c);
 
   // Trees: chunky stacked cones with snow caps, instanced with outlines
   const n = c.trees.length;
@@ -640,7 +828,7 @@ function buildCourseMeshes(){
   flakeMesh = new THREE.InstancedMesh(fg, flakeMat, c.flakes.length);
   flakeOutline = new THREE.InstancedMesh(hullGeo(fg, 0.14), inkMat, c.flakes.length);
   const fcols = [0xd98aa0, 0x8fc9d8, 0xe6c27a, 0x9fcfb0];
-  c.flakes.forEach((f,i) => flakeMesh.setColorAt(i, tmpC.set(fcols[i%4])));
+  c.flakes.forEach((f,i) => { flakeMesh.setColorAt(i, tmpC.set(fcols[i%4])); setFlake(i, f, 0, 1); });
   courseGroup.add(flakeMesh, flakeOutline);
 
   // Finish arch
@@ -679,7 +867,16 @@ const rig = { L1:0.37, L2:0.37, footY:0.3, sh:{}, el:{}, thigh:{}, knee:{} };
   add(new THREE.BoxGeometry(0.46, 0.08, 1.8), M.deck, 0,0.06,0, 0.03, board);
   for(const z of [-0.45,0,0.45]){ const s = new THREE.Mesh(new THREE.BoxGeometry(0.47,0.085,0.1), M.deckStripe); s.position.set(0,0.065,z); board.add(s); }
   for(const z of [-0.88,0.88]) add(new THREE.CylinderGeometry(0.23,0.23,0.08,14,1,false,0,Math.PI).rotateY(z>0?0:Math.PI), M.deck, 0,0.06,z+(z>0?-0.02:0.02), 0.03, board);
-  for(const z of [-0.29,0.29]) add(new THREE.BoxGeometry(0.34,0.22,0.27), M.boots, 0.04,0.2,z, 0.035, board);
+  rig.snowboard = board.children.slice();                     // everything so far is the snowboard
+  const feet = rig.feet = new THREE.Group(); m.add(feet);
+  for(const z of [-0.29,0.29]) add(new THREE.BoxGeometry(0.34,0.22,0.27), M.boots, 0.04,0.2,z, 0.035, feet);
+  // snowskate deck: short, with kicked nose and tail, no bindings
+  const skate = rig.skateDeck = new THREE.Group(); board.add(skate); skate.visible = false;
+  M.grip = toonMat(0x2a2d3c, 0x171925, { th:0.1 }); M.wood = toonMat(0xc9a27a, 0x7a5b40, { th:0.1 });
+  add(new THREE.BoxGeometry(0.27,0.045,0.82), M.grip, 0,0.09,0, 0.025, skate);
+  add(new THREE.BoxGeometry(0.26,0.03,0.82), M.wood, 0,0.055,0, 0.02, skate);
+  for(const s of [1,-1]){ const kick = add(new THREE.BoxGeometry(0.27,0.045,0.2), M.grip, 0,0.12,s*0.48, 0.025, skate); kick.rotation.x = -s*0.38; }
+  rig.M = M;
   rig.tips = [new THREE.Object3D(), new THREE.Object3D()];
   rig.tips[0].position.set(0, 0.06, 0.95); rig.tips[1].position.set(0, 0.06, -0.95);
   board.add(rig.tips[0], rig.tips[1]);
@@ -706,10 +903,13 @@ const rig = { L1:0.37, L2:0.37, footY:0.3, sh:{}, el:{}, thigh:{}, knee:{} };
   const neck = rig.neck = new THREE.Group(); neck.rotation.order = 'YZX'; neck.position.y = 0.64; waist.add(neck);
   add(new THREE.SphereGeometry(0.21,14,12), M.skin, 0,0.18,0, 0.035, neck);
   const beanieG = new THREE.SphereGeometry(0.225,14,10,0,TAU,0,Math.PI*0.5); beanieG.scale(1,1.15,1);
-  add(beanieG, M.beanie, 0,0.22,0, 0.03, neck);
-  add(new THREE.SphereGeometry(0.085,10,8), M.pom, -0.03,0.5,0, 0.025, neck);
+  rig.beanie = [add(beanieG, M.beanie, 0,0.22,0, 0.03, neck), add(new THREE.SphereGeometry(0.085,10,8), M.pom, -0.03,0.5,0, 0.025, neck)];
   const shades = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.075,0.32), M.lens); shades.position.set(0.18,0.19,0); neck.add(shades);
   scarf.neck.position.set(-0.08,0,0); neck.add(scarf.neck);
+  // hood for snowskate (street look); hidden on the mountain
+  const hoodG = new THREE.SphereGeometry(0.255,14,10,0,TAU,0,Math.PI*0.62); hoodG.scale(1.05,1.12,1.05);
+  M.hood = toonMat(0x3a3d4c, 0x1e202b, { th:0.12, rim:0.2 });
+  rig.hood = add(hoodG, M.hood, -0.03,0.2,0, 0.03, neck); rig.hood.visible = false;
   // arms: shoulder -> elbow -> mitt
   for(const s of [1,-1]){
     const sh = new THREE.Group(); sh.position.set(0, 0.5, s*0.34); waist.add(sh);
@@ -737,7 +937,13 @@ function animateRider(dt){
   const spdF = clamp(P.speed/30, 0, 1), st = input.turn;
   let H, bend, twist, look, tilt = 0, tz = 0, tx = 0;
   let A;
-  if(state === 'crash'){
+  const wob = Math.sin(t*7.3)*0.05;
+  if(state !== 'crash' && P.grind){
+    // grinding: low and quiet, arms out, everything leaning with the balance
+    const slide = P.grind.slide;
+    H = 0.44; bend = 0.32; twist = (slide ? -0.6 : -0.25)*ls; look = (slide ? -1.4 : -1.05)*ls; tilt = P.bal*0.45;
+    A = [{ r:1.55 + P.bal*0.7 + wob, s:0.25, e:0.35 }, { r:1.45 - P.bal*0.7 - wob, s:0.05, e:0.3 }];
+  } else if(state === 'crash'){
     flailT -= dt;
     if(flailT <= 0 || !flail){ flailT = 0.14; flail = [0,1].map(() => ({ r:Math.random()*2.6, s:(Math.random()-.5)*3, e:Math.random()*1.6 })); }
     A = flail; H = 0.66; bend = 0.25 + Math.sin(t*11)*0.25; twist = Math.sin(t*9)*0.7; look = -ls;
@@ -754,6 +960,9 @@ function animateRider(dt){
     if(flipAmt > 0.3) A = [{ r:0.25, s:1.5, e:1.0 }, { r:0.25, s:1.5, e:1.0 }];               // hugging the knees
     if(g === 'indy'){ A = [{ r:2.7, s:0.5, e:0.15 }, { r:0.1, s:1.5, e:0.1 }]; tx = 0.5*ls; }  // style arm up, board poked out
     if(g === 'method'){ A = [{ r:0.3, s:-1.2, e:0.2 }, { r:2.5, s:0.6, e:0.2 }]; tz = 0.95; }  // board pulled up behind the back
+    if(g === 'tail'){ A = [{ r:2.2, s:0.4, e:0.3 }, { r:0.2, s:-0.7, e:0.15 }]; tx = -0.45; bend = 0.75; }     // back hand to the tail, nose up
+    if(g === 'nose'){ A = [{ r:0.15, s:1.45, e:0.1 }, { r:2.3, s:0.3, e:0.3 }]; tx = 0.5; bend = 0.95; }     // front hand to the nose, tail kicked up
+    if(P.bt){ H = 0.3; bend = 0.4; A = [{ r:1.4+fl, s:0.4, e:0.5 }, { r:1.3-fl, s:0.2, e:0.5 }]; }   // snowskate flip: knees up, board turns below
   } else {
     const tuck = input.tuck ? 1 : 0, sway = Math.sin(t*1.7)*0.07, breathe = Math.sin(t*2.3)*0.012*(1-spdF);
     H = 0.6 - tuck*0.17 - Math.abs(st)*0.1*(0.4+spdF) + breathe;
@@ -763,19 +972,50 @@ function animateRider(dt){
     tilt = st*0.1;
     A = [{ r:0.55+st*0.35*ls+sway, s:0.12+tuck*0.95, e:0.45+tuck*0.9 },
          { r:0.45-st*0.35*ls-sway, s:-0.12+tuck*0.95, e:0.35+tuck*0.9 }];
+    if(P.press){                                         // press/butter: weight thrown over the nose or tail, arms wide
+      const n = P.press === 'nose' ? 1 : -1;
+      tx = n*0.34; bend = 0.45; twist = (-0.5 + clamp(P.spinVel*0.08,-0.6,0.6))*ls; H = 0.5;
+      A = [{ r:1.35 + wob, s:0.35*n, e:0.3 }, { r:1.2 - wob, s:-0.2*n, e:0.3 }];
+    }
+    if(P.manual){                                        // snowskate manual: balance point on the tail (or nose)
+      const n = P.manual === 'nose' ? 1 : -1;
+      tx = n*0.26; bend = 0.25 + (n>0 ? 0.25 : 0); H = 0.52; tilt = P.bal*0.3;
+      A = [{ r:1.3 + P.bal*0.6 + wob, s:0.3, e:0.3 }, { r:1.2 - P.bal*0.6 - wob, s:0, e:0.3 }];
+    }
+    if(P.pushT > 0){                                     // snowskate push: crouch and kick
+      const ph = Math.sin(P.pushT*9);
+      H = 0.5 + ph*0.06; bend = 0.35; twist = -0.55*ls;
+      A = [{ r:0.4, s:0.5 + ph*0.3, e:0.6 }, { r:0.5, s:-0.4 - ph*0.3, e:0.4 }];
+    }
   }
   pose.hv += (H - pose.h)*170*dt; pose.hv *= Math.exp(-14*dt); pose.h = clamp(pose.h + pose.hv*dt, 0.22, 0.73);
-  const k = 1-Math.exp(-dt*11), ka = 1-Math.exp(-dt*(state==='crash' ? 22 : 13));
+  const k = 1-Math.exp(-dt*11);
   pose.bend = lerp(pose.bend, bend, k); pose.twist = lerp(pose.twist, twist, k); pose.look = lerp(pose.look, look, k*0.7);
   pose.tilt = lerp(pose.tilt, tilt, k); pose.tz = lerp(pose.tz, tz, k*0.8); pose.tx = lerp(pose.tx, tx, k*0.8);
-  for(let i=0;i<2;i++) for(const key of ['r','s','e']) pose.arms[i][key] = lerp(pose.arms[i][key], A[i][key], ka);
+  // arms ride springs, so they overshoot a little and settle: follow-through instead of snapping to poses
+  const stiff = state==='crash' ? 260 : 120, damp = state==='crash' ? 16 : 10;
+  for(let i=0;i<2;i++) for(const key of ['r','s','e']){
+    const vk = key+'v', a = pose.arms[i];
+    a[vk] = ((a[vk] || 0) + (A[i][key] - a[key])*stiff*dt) * Math.exp(-damp*dt);
+    a[key] += a[vk]*dt;
+  }
+  // snowskate flip tricks spin the deck under the feet; the feet lift to let it turn
+  let lift = 0;
+  if(P.bt){
+    const e = 1 - Math.pow(1 - Math.min(1, P.bt.prog), 2);
+    rig.board.rotation.set(0, P.bt.ry*e, P.bt.rx*e);
+    lift = Math.sin(Math.min(1, P.bt.prog)*Math.PI)*0.34;
+  } else rig.board.rotation.set(0, 0, 0);
+  rig.board.position.y = lift*0.55; rig.feet.position.y = lift;
   // apply
-  const hipY = rig.footY + pose.h;
+  const footY = 0.3 + lift;
+  const hipY = footY + pose.h;
   rig.hips.position.set(0, hipY, 0);
   rig.hips.rotation.y = pose.twist*0.25;
   rig.waist.rotation.set(pose.tilt, pose.twist*0.75, -pose.bend);
   rig.neck.rotation.set(0, pose.look - pose.twist, pose.bend*0.75);
   const a = Math.acos(clamp(pose.h/(rig.L1+rig.L2), 0.15, 1));
+  rig.neck.rotation.z += clamp(pose.hv*0.03, -0.12, 0.12);   // head nods with the knees
   for(const s of [1,-1]){
     rig.thigh[s].position.set(0, hipY - 0.03, s*0.27);
     rig.thigh[s].rotation.z = a; rig.knee[s].rotation.z = -2*a;
@@ -787,7 +1027,7 @@ function animateRider(dt){
 }
 
 function updateScarf(dt){
-  const visible = rider.root.visible;
+  const visible = rider.root.visible && !isSkate();
   scarf.segs.forEach(s => s.visible = visible);
   if(!visible) return;
   scarf.neck.getWorldPosition(tmpV);
@@ -866,7 +1106,7 @@ let carveAcc = 0;
 function carveSnow(dt){
   const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
   const turn = Math.abs(input.turn), spd = P.speed;
-  const rate = spd*0.9 + turn*spd*5.5 + (input.tuck ? spd*0.6 : 0);   // particles per second
+  const rate = (spd*0.9 + turn*spd*5.5 + (input.tuck && !isSkate() ? spd*0.6 : 0)) * (isSkate() ? 0.35 : 1);   // particles per second
   carveAcc += rate*dt;
   const side = -Math.sign(input.turn || 0.0001);                   // spray goes to the outside of the turn
   const ox = fz*side, oz = -fx*side;
@@ -880,7 +1120,7 @@ function carveSnow(dt){
   }
 }
 function updateSnow(dt){
-  const ground = course ? groundH : null;
+  const ground = course && course.hg ? groundFast : null;
   for(let i=0;i<SNOW;i++){
     if(snowLife[i] <= 0){ if(snowSize[i] !== 0){ snowSize[i] = 0; snowPos[i*3+1] = -9999; } continue; }
     snowLife[i] -= dt;
@@ -927,7 +1167,7 @@ const tracks = (() => {
       if(!last || Math.hypot(P.x-last.x, P.z-last.z) > 0.7 || (!on && last.w)){
         const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
         const w = on ? 0.2 + Math.abs(input.turn)*0.14 : 0;
-        const p = { x:P.x, y:groundH(P.x,P.z)+0.03, z:P.z, w, nx:fz, nz:-fx };
+        const p = { x:P.x, y:groundFast(P.x,P.z)+0.03, z:P.z, w, nx:fz, nz:-fx };
         if(on && last && !last.w) pts.push(Object.assign({}, p, { w:0 }));   // start a new stretch cleanly after a jump
         pts.push(p); if(pts.length > N) pts.splice(0, pts.length - N);
         last = p; dirty = true;
@@ -971,23 +1211,28 @@ let rt = null;
 const postCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
 const postMat = new THREE.ShaderMaterial({
   uniforms: { tColor:{value:null}, tDepth:{value:null}, uRes:{value:new THREE.Vector2(1,1)}, uNear:{value:camera.near}, uFar:{value:camera.far},
-              uPx:{value:1}, uSpeed:{value:0}, uTime:{value:0}, uInk:{value:new THREE.Color(INK)} },
+              uPx:{value:1}, uSpeed:{value:0}, uTime:{value:0}, uFish:{value:0}, uInk:{value:new THREE.Color(INK)} },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: `
-    uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 uRes; uniform float uNear, uFar, uPx, uSpeed, uTime; uniform vec3 uInk;
+    uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 uRes; uniform float uNear, uFar, uPx, uSpeed, uTime, uFish; uniform vec3 uInk;
     varying vec2 vUv;
     float lin(vec2 uv){ float d = texture2D(tDepth, uv).x; float z = d*2.0-1.0; return 2.0*uNear*uFar/(uFar+uNear - z*(uFar-uNear)); }
     float hash(float n){ return fract(sin(n)*43758.5453); }
     void main(){
+      // fisheye: the middle of the picture swells, the corners stay put (skate filming lens)
+      vec2 asp = vec2(uRes.x/uRes.y, 1.0);
+      vec2 q = (vUv - 0.5) * asp;
+      float re2 = dot(0.5*asp, 0.5*asp);
+      vec2 uv = 0.5 + (q * ((1.0 - uFish) + uFish*dot(q,q)/re2)) / asp;
       vec2 o = uPx / uRes;
-      float d0 = lin(vUv), dl = lin(vUv-vec2(o.x,0.)), dr = lin(vUv+vec2(o.x,0.)), dd = lin(vUv-vec2(0.,o.y)), du = lin(vUv+vec2(0.,o.y));
+      float d0 = lin(uv), dl = lin(uv-vec2(o.x,0.)), dr = lin(uv+vec2(o.x,0.)), dd = lin(uv-vec2(0.,o.y)), du = lin(uv+vec2(0.,o.y));
       float i0 = 1.0/d0;
       float lap = (abs(1.0/dl + 1.0/dr - 2.0*i0) + abs(1.0/dd + 1.0/du - 2.0*i0)) / i0;
       float jump = max(max(abs(dl-d0),abs(dr-d0)), max(abs(dd-d0),abs(du-d0))) / d0;
       float edge = max(smoothstep(0.02, 0.05, lap), smoothstep(0.07, 0.12, jump));
       float dmin = min(d0, min(min(dl,dr), min(dd,du)));
       edge *= 1.0 - smoothstep(160.0, 340.0, dmin);
-      vec3 col = texture2D(tColor, vUv).rgb;
+      vec3 col = texture2D(tColor, uv).rgb;
       float l = dot(col, vec3(0.299,0.587,0.114));
       col = mix(vec3(l), col, 0.96);
       col = mix(col, uInk, edge);
@@ -1086,13 +1331,19 @@ const Music = {
   },
   next(){ if(!this.tracks.length) return; this.idx = (this.idx+1) % this.tracks.length; this.play(); },
   prev(){ if(!this.tracks.length) return; this.idx = (this.idx-1+this.tracks.length) % this.tracks.length; this.play(); },
-  set(param, v, tc=0.08){ param.setTargetAtTime(v, this.ctx.currentTime, tc); },
+  // only schedule automation when a target really changes; per-frame calls pile up events in the audio thread
+  set(param, v, tc=0.08){
+    const last = param._ppLast;
+    if(last !== undefined && Math.abs(v - last) <= Math.max(0.5, Math.abs(last)*0.015)) return;
+    param._ppLast = v; param.setTargetAtTime(v, this.ctx.currentTime, tc);
+  },
   land(clean){
     if(!this.ctx || !clean) return;
     const t = this.ctx.currentTime;
     this.lp.frequency.cancelScheduledValues(t); this.lp.frequency.setValueAtTime(18000, t);
     this.bassF.gain.cancelScheduledValues(t); this.bassF.gain.setValueAtTime(this.fx.bass+9, t);
     this.duck.gain.cancelScheduledValues(t); this.duck.gain.setValueAtTime(1.15, t);
+    this.lp.frequency._ppLast = this.bassF.gain._ppLast = this.duck.gain._ppLast = undefined;
     this.landKick = 0.35;
   },
   crash(){ this.rateTarget = 0.3; this.crashT = 0.7; },
@@ -1376,7 +1627,8 @@ const POWERS = {
 function powerSvg(k){ return `<svg class="ico" viewBox="0 0 38 38" fill="none" stroke="#8fc9d8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${POWERS[k].ico}"/></svg>`; }
 
 /* ---------- Game state ---------- */
-const P = { x:0, y:0, z:0, vy:0, heading:0, speed:0, grounded:true, airT:0, spin:0, spinStart:0, spinVel:0, flip:0, flipVel:0, squash:0, squashV:0, jumpsLeft:0, pitch:0, lean:0, leanV:0, crashT:0, invuln:0, shield:0, groundT:0, popped:false, bigAir:false, grab:null, grabT:0, grabName:null, tumble:new THREE.Vector3() };
+const P = { x:0, y:0, z:0, vy:0, heading:0, speed:0, grounded:true, airT:0, spin:0, spinStart:0, spinVel:0, flip:0, flipVel:0, squash:0, squashV:0, press:null, pressT:0, pressSpin0:0, spinTarget:null,
+  bt:null, btDone:[], grind:null, grindT:0, lastRail:null, railCool:0, bal:0, balV:0, manual:null, manualT:0, pushT:0, camSide:0, jumpsLeft:0, pitch:0, lean:0, leanV:0, crashT:0, invuln:0, shield:0, groundT:0, popped:false, bigAir:false, grab:null, grabT:0, grabName:null, tumble:new THREE.Vector3() };
 let state = 'title';
 let run = { mode:'run', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 };
 let timeScale = 1;
@@ -1388,15 +1640,38 @@ function showScreen(id){
   for(const s of ['scrTitle','scrMusic','scrPick','scrPause','scrOver']) $(s).hidden = s!==id;
   const inGame = id===null;
   $('hud').hidden = !(inGame || id==='scrPause' || id==='scrPick');
+  if(!inGame) $('balance').hidden = true;
   $('progress').hidden = $('hud').hidden;
   $('touch').hidden = !(inGame && isTouch && !padActive);
   menuFocus = 0; focusMenu();
 }
-const isFree = () => run.mode === 'free';
+const isFree = () => run.mode === 'free' || run.mode === 'skate';
+const isSkate = () => run.mode === 'skate';
+/* Snowskate flip tricks: the board turns under your feet while you stay upright */
+const FLIP_TRICKS = {
+  'Kickflip':     { rx: -TAU, ry: 0,    dur: 0.36, pts: 320 },
+  'Heelflip':     { rx:  TAU, ry: 0,    dur: 0.36, pts: 320 },
+  'Pop Shove-it': { rx: 0,    ry: Math.PI, dur: 0.3, pts: 260 },
+  'Tre Flip':     { rx: -TAU, ry: TAU,  dur: 0.5,  pts: 620 }
+};
+const FLIP_BUTTONS = { x:'Kickflip', b:'Heelflip', lb:'Pop Shove-it', rb:'Tre Flip' };
 function startRun(){ run = { mode:'run', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; startPeak(); }
 function startFree(){ run = { mode:'free', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; startPeak(); }
+function startSkate(){ run = { mode:'skate', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; startPeak(); }
+/* the rider dresses for the mode: puffer and snowboard on the mountain, hoodie, baggy denim and a snowskate in the street */
+function setOutfit(skate){
+  const M = rig.M;
+  rig.snowboard.forEach(o => o.visible = !skate);
+  rig.skateDeck.visible = skate;
+  rig.hood.visible = skate; rig.beanie.forEach(o => o.visible = !skate);
+  const set = (m, c, s) => { m.uniforms.uColor.value.setHex(c); m.uniforms.uShade.value.setHex(s); };
+  if(skate){ set(M.jacket, 0x3a3d4c, 0x1e202b); set(M.jacket2, 0x4a4e60, 0x262938); set(M.pants, 0x8a9cc0, 0x4f5f82); set(M.boots, 0x2a2d3c, 0x14161f); set(M.mitt, 0x3a3d4c, 0x1e202b); }
+  else { set(M.jacket, 0x4f93a6, 0x264f66); set(M.jacket2, 0xe6c27a, 0x8f7140); set(M.pants, 0x3d3966, 0x211f3b); set(M.boots, 0xd6dcee, 0x6f78a6); set(M.mitt, 0xe6c27a, 0x8f7140); }
+}
 function startPeak(){
-  genCourse(run.peak, (Math.random()*1e9)|0, isFree());
+  genCourse(run.peak, (Math.random()*1e9)|0, isFree(), isSkate());
+  setOutfit(isSkate());
+  P.grind = null; P.manual = null; P.bt = null; P.btDone.length = 0; P.press = null; P.pushT = 0; P.bal = 0; P.camSide = 0; P.lastRail = null;
   buildCourseMeshes();
   P.x=0; P.z=12; P.y=groundH(0,12); P.vy=0; P.heading=0; P.speed=10; P.grounded=true; P.airT=0;
   P.spin=0; P.flip=0; P.crashT=0; P.invuln=1; P.shield=pw('shield'); P.groundT=0; P.bigAir=false; P.grab=null; P.grabT=0; P.grabName=null;
@@ -1404,14 +1679,17 @@ function startPeak(){
   resetSnow();
   camYaw=0; placeCamera(1, true); resetScarf();
   state='ride'; showScreen(null);
-  $('peakLbl').textContent = isFree() ? `FREE RIDE · MTN ${run.peak}` : `PEAK ${run.peak}`;
+  $('peakLbl').textContent = isSkate() ? `SNOWSKATE · SPOT ${run.peak}` : isFree() ? `FREE RIDE · MTN ${run.peak}` : `PEAK ${run.peak}`;
   $('hearts').hidden = isFree();
   renderHearts();
   const feat = `${course.kickers.filter(k=>k.mega).length} MEGA RAMPS · ${course.cliffs.length} CLIFFS`;
-  if(isFree()) popup(run.peak===1 ? 'Free Ride' : 'New Mountain', feat);
+  if(isSkate()) popup(run.peak===1 ? 'Snowskate' : 'New Spot', `${course.rails.length} RAILS & LEDGES · ${course.stairs.length} STAIR SETS`);
+  else if(isFree()) popup(run.peak===1 ? 'Free Ride' : 'New Mountain', feat);
   else popup(`Peak ${run.peak}`, run.peak===1 ? 'DROP IN' : feat);
 }
 function takeoff(){
+  if(P.press) endPress();
+  if(P.manual) endManual(true);
   P.grounded = false; P.airT = 0; P.spinStart = P.spin; P.jumpsLeft = pw('double'); P.grabT = 0; P.grabName = null;
   // launching off a mega ramp or a big cliff earns slow motion
   P.bigAir = false;
@@ -1427,23 +1705,44 @@ function popup(t, s='', bad=false){ $('popT').textContent=t; $('popS').textConte
 function crash(reason){
   if(P.invuln>0 || state!=='ride') return;
   if(reason==='tree' && P.shield>0){ P.shield--; P.invuln=1.2; P.speed*=0.6; popup('Saved!','TREE HUGGER'); return; }
-  state='crash'; P.speed*=0.35; run.combo=0; P.grab=null; timeScale = 1;
+  state='crash'; P.speed*=0.35; run.combo=0; P.grab=null; timeScale = 1; P.grind = null; P.manual = null; P.bt = null; P.btDone.length = 0; P.press = null; P.bal = 0;
   P.crashT = isFree() ? 1.1 : 1.6;
   if(!isFree()){ run.hearts--; renderHearts(); }
   P.tumble.set((Math.random()-.5)*14, (Math.random()-.5)*10, (Math.random()-.5)*14);
   Music.crash(); shake = reduceMotion ? 0 : 0.6;
   landingBurst(Math.max(14, -P.vy + P.speed*0.4)); snowBurst(P.x, P.y, P.z, 14, 1.4);
   const sub = isFree() ? 'SHAKE IT OFF' : (run.hearts>0 ? `${run.hearts} ${run.hearts===1?'HEART':'HEARTS'} LEFT` : 'RUN OVER');
-  popup(reason==='tree' ? 'Timber!' : 'Wipeout', sub, true);
+  popup(reason==='tree' ? 'Timber!' : reason==='bail' ? 'Bail' : 'Wipeout', sub, true);
+}
+const GRAB_NAMES = { indy:'Indy', method:'Method', tail:'Tail Grab', nose:'Nose Grab' };
+function scoreTrick(names, pts, opts={}){
+  if(opts.sketchy){
+    pts = Math.round(pts*0.4/10)*10; run.score += pts; run.combo = 0; P.speed *= 0.7;
+    P.squashV -= 3; pose.hv -= 2; P.lean = (Math.random()<.5?-1:1)*0.5;
+    popup('Sketchy!', names.length ? `${names.join(' + ')} · +${pts.toLocaleString()}` : 'SAVED IT', true);
+    Music.land(true); if(!reduceMotion) shake = Math.max(shake, 0.4);
+    return;
+  }
+  run.combo++;
+  let mult = (1 + (run.combo-1)*0.5) * (opts.style ? 1.25 : 1);
+  if(pw('bass') && run.combo>=3) mult *= 1.25;
+  pts = Math.round(pts*mult/10)*10;
+  run.score += pts;
+  popup(names.join(' + '), `+${pts.toLocaleString()}${mult>1?`  ×${mult.toFixed(1)}`:''}${opts.style ? '  STYLE' : ''}`);
+  Music.land(true); if(!reduceMotion && !opts.quiet) shake = Math.max(shake, 0.25);
 }
 function land(){
   const air = P.airT, gT = P.grabT, gName = P.grabName;
+  const bt = P.bt, flipsDone = P.btDone.slice();
   P.grounded = true; P.airT = 0; P.jumpsLeft = 0; P.grab = null; P.grabT = 0; P.grabName = null; P.bigAir = false; P.spinVel = 0; P.flipVel = 0;
-  if(air < 0.35){ P.spin = Math.round(P.spin/Math.PI)*Math.PI; P.flip = 0; return; }
+  P.bt = null; P.btDone.length = 0; P.grabT = 0;
+  // snowskate: the board has to be back under your feet
+  if(bt && bt.prog < 0.7){ crash('bail'); return; }
+  if(air < 0.35 && !flipsDone.length && !bt){ P.spin = Math.round(P.spin/Math.PI)*Math.PI; P.flip = 0; return; }
   const spinR = Math.round(P.spin/Math.PI)*Math.PI, spinErr = Math.abs(P.spin-spinR);
   const flipR = Math.round(P.flip/TAU)*TAU, flipErr = Math.abs(P.flip-flipR);
   const tol = 0.95 + pw('soft')*0.3;            // about 55 degrees off still lands clean
-  let sketchy = false;
+  let sketchy = !!bt;                           // caught the board late
   if(spinErr > tol || flipErr > tol*1.1){
     if(spinErr > tol + 0.6 || flipErr > tol*1.1 + 0.6){ crash('land'); return; }
     sketchy = true;                              // way off but saveable: keep riding, lose the combo
@@ -1455,24 +1754,32 @@ function land(){
   const names = [];
   if(air > 2.2){ names.push('Mega Air'); pts += air*150; }
   if(flips) names.push((flips>1?['','','Double ','Triple '][Math.min(flips,3)]:'') + (front?'Frontflip':'Backflip'));
-  if(deg>=180) names.push(String(deg));
-  if(gT > 0.25){ names.push((gT > 0.9 ? 'Tweaked ' : '') + (gName === 'method' ? 'Method' : 'Indy')); pts += gT*350; }
+  const grabbed = gT > 0.25;
+  const grabName = grabbed ? (gT > 0.9 ? 'Tweaked ' : '') + GRAB_NAMES[gName] : '';
+  const flipName = flipsDone.join(' ');
+  for(const f of flipsDone) pts += FLIP_TRICKS[f] ? FLIP_TRICKS[f].pts : 300;
+  if(grabbed) pts += gT*350;
+  // spins carry the grab or flip trick in one name, the way riders call them: "540 Indy", "180 Kickflip"
+  const spinPart = deg >= 180 ? String(deg) : '';
+  const main = [spinPart, flipName || grabName].filter(Boolean).join(' ');
+  if(main) names.push(main);
+  if(flipName && grabName) names.push(grabName);
   if(!names.length && air>1.1) names.push('Big Air');
-  if(sketchy){
-    pts = Math.round(pts*0.4/10)*10; run.score += pts; run.combo = 0; P.speed *= 0.7;
-    P.squashV -= 3; pose.hv -= 2; P.lean = (Math.random()<.5?-1:1)*0.5;
-    popup('Sketchy!', names.length ? `${names.join(' + ')} · +${pts.toLocaleString()}` : 'SAVED IT', true);
-    Music.land(true); if(!reduceMotion) shake = Math.max(shake, 0.4);
-  } else if(names.length){
-    run.combo++;
-    let mult = 1 + (run.combo-1)*0.5;
-    if(pw('bass') && run.combo>=3) mult *= 1.25;
-    pts = Math.round(pts*mult/10)*10;
-    run.score += pts;
-    popup(names.join(' + '), `+${pts.toLocaleString()}${mult>1?`  ×${mult.toFixed(1)}`:''}`);
-    Music.land(true); if(!reduceMotion) shake = Math.max(shake, 0.25);
-  } else { run.score += Math.round(air*60); Music.land(true); }
+  if(sketchy) scoreTrick(names, pts, { sketchy:true });
+  else if(names.length) scoreTrick(names, pts, { style: deg >= 180 && grabbed });
+  else { run.score += Math.round(air*60); Music.land(true); }
   P.groundT = 0;
+}
+/* Snowboard presses: hold LB/RB on the snow; steering while pressed butters the board around */
+function endPress(){
+  const t = P.pressT, type = P.press;
+  P.press = null; P.spinVel = 0;
+  const target = Math.round(P.spin/Math.PI)*Math.PI;
+  const deg = Math.round(Math.abs(target - P.pressSpin0)*180/Math.PI);
+  P.spinTarget = target;
+  if(t < 0.5 && deg < 180) return;
+  const name = (type === 'nose' ? 'Nose' : 'Tail') + (deg >= 180 ? ` Butter ${deg}` : ' Press');
+  scoreTrick([name], t*120 + deg/180*220, { quiet:true });
 }
 function finishPeak(){
   if(isFree()){ run.peak++; startPeak(); return; }
@@ -1534,9 +1841,7 @@ function readInput(){
   if(keys.has('ArrowDown')||keys.has('KeyS')||touchKeys.has('down')) vert += 1;
   if(keys.has('ShiftLeft')||keys.has('ShiftRight')) tuck = true;
   if(keys.has('Space')||touchKeys.has('jump')) jump = true;
-  let grab = null;
-  if(keys.has('KeyJ')||touchKeys.has('grab')) grab = 'indy';
-  if(keys.has('KeyK')) grab = 'method';
+  const tb = { x: keys.has('KeyJ')||touchKeys.has('grab'), b: keys.has('KeyK'), lb: keys.has('KeyQ'), rb: keys.has('KeyE') };
   const np = nativeGamepad();
   const pads = np ? [np] : (navigator.getGamepads ? navigator.getGamepads() : []);
   const now = {};
@@ -1548,15 +1853,15 @@ function readInput(){
     if(btn(14)) steer -= 1; if(btn(15)) steer += 1; if(btn(12)) vert -= 1; if(btn(13)) vert += 1;
     if(btn(7)) tuck = true;
     if(btn(0)) jump = true;
-    if(btn(2)) grab = 'indy'; if(btn(1)) grab = 'method';
-    for(const i of [0,1,2,3,4,9,12,13,14,15]) now[i] = now[i] || btn(i);
+    if(btn(2)) tb.x = true; if(btn(1)) tb.b = true; if(btn(4)) tb.lb = true; if(btn(5)) tb.rb = true;
+    for(const i of [0,1,2,3,4,5,9,12,13,14,15]) now[i] = now[i] || btn(i);
     if(Object.values(now).some(Boolean) || ax || ay){ if(!padActive){ padActive = true; $('touch').hidden = true; } }
     break;
   }
   const edge = i => now[i] && !prevPad[i];
   if(edge(9)) togglePause();
   const inMenu = ['scrTitle','scrMusic','scrPick','scrPause','scrOver'].some(s => !$(s).hidden);
-  if(!inMenu && state==='ride'){ if(edge(3)) Music.next(); if(edge(4)) Music.prev(); }
+  if(!inMenu && state==='ride'){ if(edge(3)) Music.next(); }
   if(inMenu){
     // one step per press; holding a direction repeats so long song lists scroll quickly
     let dir = Math.abs(steer)>0.6 ? Math.sign(steer) : (Math.abs(vert)>0.6 ? Math.sign(vert) : 0);
@@ -1569,6 +1874,7 @@ function readInput(){
     if(edge(0) && cur){ if(cur.tagName === 'INPUT') cur.focus(); else cur.click(); }
     if(edge(2) && cur && cur.classList.contains('lrow') && cur.dataset.r) libActivate(cur, true);
     if(edge(3) && state==='pause') Music.next();
+    if(edge(4) && state==='pause') Music.prev();
     if(edge(1)){
       if(!$('scrMusic').hidden){ if(!libBack()) $('btnMusicBack').click(); }
       else if(!$('scrPause').hidden) $('btnResume').click();
@@ -1576,7 +1882,13 @@ function readInput(){
   }
   prevPad = now;
   input.jumpEdge = jump && !input.jump;
-  input.steer = clamp(steer,-1,1); input.turn = -input.steer; input.vert = clamp(vert,-1,1); input.tuck = tuck || (P.grounded && input.vert>0.5); input.jump = jump; input.grab = grab;
+  input.steer = clamp(steer,-1,1); input.turn = -input.steer; input.vert = clamp(vert,-1,1);
+  input.tuck = tuck || (P.grounded && input.vert>0.5 && !isSkate()); input.jump = jump;
+  const prevTb = input.tb || {};
+  input.trickEdge = ['x','b','lb','rb'].find(k => tb[k] && !prevTb[k]) || null;
+  input.tb = tb;
+  input.grab = tb.x ? 'indy' : tb.b ? 'method' : tb.lb ? 'tail' : tb.rb ? 'nose' : null;
+  input.press = tb.lb ? 'tail' : tb.rb ? 'nose' : null;
 }
 let menuFocus = 0, menuHeldDir = 0, menuRepeatAt = 0;
 function focusables(){
@@ -1598,7 +1910,7 @@ function togglePause(){
   if(state==='ride'){
     state='pause';
     $('pauseInfo').textContent = isFree() ? `Free Ride · mountain ${run.peak} · ${run.score.toLocaleString()} points this session` : `Peak ${run.peak} · ${run.score.toLocaleString()} points · ${Music.tracks.length} songs in rotation`;
-    $('btnNewMtn').hidden = !isFree(); $('btnQuit').textContent = isFree() ? 'END SESSION' : 'QUIT RUN';
+    $('btnNewMtn').hidden = !isFree(); $('btnNewMtn').textContent = isSkate() ? 'NEW SPOT' : 'NEW MOUNTAIN'; $('btnQuit').textContent = isFree() ? 'END SESSION' : 'QUIT RUN';
     showScreen('scrPause');
   }
   else if(state==='pause'){ state='ride'; showScreen(null); }
@@ -1611,6 +1923,7 @@ async function begin(btn, fn){
 }
 $('btnStart').addEventListener('click', () => begin($('btnStart'), startRun));
 $('btnFree').addEventListener('click', () => begin($('btnFree'), startFree));
+$('btnSkate').addEventListener('click', () => begin($('btnSkate'), startSkate));
 $('btnNewMtn').addEventListener('click', () => { run.peak++; startPeak(); });
 let musicReturn = 'scrTitle';
 function openMusic(from){ musicReturn = from; showScreen('scrMusic'); renderLib(); }
@@ -1621,7 +1934,7 @@ $('btnResume').addEventListener('click', togglePause);
 $('btnSkip').addEventListener('click', () => Music.next());
 $('btnQuit').addEventListener('click', () => { if(isFree()) $('btnTitle').click(); else gameOver(); });
 $('btnAgain').addEventListener('click', () => { Music.play(); startRun(); });
-$('btnTitle').addEventListener('click', () => { state='title'; genCourse(1, 7); buildCourseMeshes(); showScreen('scrTitle'); });
+$('btnTitle').addEventListener('click', () => { state='title'; run.mode = 'run'; setOutfit(false); genCourse(1, 7); buildCourseMeshes(); showScreen('scrTitle'); });
 
 /* ---------- Simulation ---------- */
 function step(dt){
@@ -1642,29 +1955,72 @@ function step(dt){
   }
   if(state!=='ride') return;
   P.invuln = Math.max(0, P.invuln-dt);
+  const skate = isSkate();
+  if(skate){
+    P.railCool = Math.max(0, P.railCool - dt);
+    if(P.grind){ stepGrind(dt); collectFlakes(c, dt); if(P.z >= c.L) finishPeak(); return; }
+  }
   const g = P.grounded ? G : G*Math.max(0.6, 1 - 0.2*pw('moon'));
   if(P.grounded){
     P.groundT += dt;
     if(P.groundT > 3 && run.combo){ run.combo = 0; }
-    const turnRate = 1.9 - Math.min(P.speed/40,1)*0.6;
+    // presses and butters (snowboard): steering spins the board on the snow instead of carving
+    const pressing = !isSkate() && input.press && P.speed > 4;
+    if(pressing){
+      if(!P.press){ P.press = input.press; P.pressT = 0; P.pressSpin0 = Math.round(P.spin/Math.PI)*Math.PI; P.spinTarget = null; }
+      P.pressT += dt;
+      P.spinVel += (input.turn*3.6 - P.spinVel)*(1-Math.exp(-dt*6));
+      P.spin += P.spinVel*dt;
+    } else if(P.press) endPress();
+    if(P.spinTarget !== null){ P.spin = lerp(P.spin, P.spinTarget, 1-Math.exp(-dt*10)); if(Math.abs(P.spin-P.spinTarget) < 0.01){ P.spin = P.spinTarget; P.spinTarget = null; } }
+    const turnRate = (isSkate() ? 2.6 : 1.9 - Math.min(P.speed/40,1)*0.6) * (pressing ? 0.3 : 1);
     P.heading = clamp(P.heading + input.turn*turnRate*dt, -1.35, 1.35);
     if(!input.turn) P.heading *= Math.exp(-dt*0.4);
     const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
     const dh = groundH(P.x+fx*0.6, P.z+fz*0.6) - groundH(P.x-fx*0.6, P.z-fz*0.6);
     const slope = dh/1.2;
-    const maxV = (input.tuck ? 38*(1+0.12*pw('turbo')) : 30);
-    P.speed += -slope*G*dt;
-    P.speed -= (0.6 + Math.abs(input.turn)*P.speed*0.22 + (P.speed>maxV ? (P.speed-maxV)*1.5 : 0) + 0.008*P.speed*P.speed*(input.tuck?0.55:1))*dt;
-    P.speed = clamp(P.speed, 3, 60);
+    if(skate){
+      // snowskate: push to keep rolling, gentle top speed, manuals on the tail or nose
+      const maxV = 15;
+      P.speed += -slope*G*dt;
+      if(input.tuck && P.speed < 13 && !P.manual){ P.speed += 7*dt; P.pushT += dt; } else P.pushT = 0;
+      P.speed -= (0.9 + Math.abs(input.turn)*P.speed*0.18 + (P.speed>maxV ? (P.speed-maxV)*1.5 : 0))*dt;
+      P.speed = clamp(P.speed, 2, 24);
+      const want = input.vert < -0.6 ? 'tail' : input.vert > 0.6 ? 'nose' : null;
+      if(want && !P.manual && P.speed > 3){ P.manual = want; P.manualT = 0; P.bal = (Math.random()-.5)*0.15; P.balV = 0; }
+      if(P.manual){
+        if(!want){ endManual(true); }
+        else {
+          P.manualT += dt;
+          P.balV += (P.bal*2.2 + (Math.random()-.5)*2.4)*dt - input.turn*3.5*dt; P.balV *= Math.exp(-2.5*dt); P.bal += P.balV*dt;
+          if(Math.abs(P.bal) > 1) endManual(false);
+        }
+      }
+    } else {
+      const maxV = (input.tuck ? 38*(1+0.12*pw('turbo')) : 30);
+      P.speed += -slope*G*dt;
+      P.speed -= (0.6 + Math.abs(input.turn)*P.speed*0.22 + (P.speed>maxV ? (P.speed-maxV)*1.5 : 0) + 0.008*P.speed*P.speed*(input.tuck?0.55:1))*dt;
+      P.speed = clamp(P.speed, 3, 60);
+    }
     P.pitch = lerp(P.pitch, -Math.atan(slope), 1-Math.exp(-dt*12));
     { const tgt = -input.turn*0.42*clamp(P.speed/20,0.3,1); P.leanV += (tgt-P.lean)*90*dt; P.leanV *= Math.exp(-11*dt); P.lean += P.leanV*dt; }
-    if(input.jumpEdge){ P.vy = Math.max(P.vy,0) + 8.2 + Math.max(0,P.vy*0.3); takeoff(); P.popped=true; pose.hv += 2.6; P.squashV += 3.2; snowBurst(P.x, P.y, P.z, 4, 0.5); }
+    // ollie (A); on the snowskate a trick button pops and flips the board in one go
+    const flipPop = skate && input.trickEdge;
+    if(input.jumpEdge || flipPop){
+      if(P.manual) endManual(true);
+      P.vy = Math.max(P.vy,0) + (skate ? 6.7 : 8.2) + Math.max(0,P.vy*0.3); takeoff(); P.popped=true; pose.hv += 2.6; P.squashV += 3.2; snowBurst(P.x, P.y, P.z, 4, 0.5);
+      if(flipPop) startFlip(FLIP_BUTTONS[input.trickEdge]);
+    }
   } else {
     P.airT += dt;
     const spinRate = 7.4*(1+0.35*pw('whirl')), flipRate = 5.8*(1+0.25*pw('whirl'));
     // spins and flips build up and carry momentum, so they whip around instead of snapping
     P.spinVel += (input.turn*spinRate - P.spinVel)*(1-Math.exp(-dt*(input.turn ? 7 : 3)));
-    P.flipVel += (-input.vert*flipRate - P.flipVel)*(1-Math.exp(-dt*(input.vert ? 8 : 3.5)));
+    if(!skate) P.flipVel += (-input.vert*flipRate - P.flipVel)*(1-Math.exp(-dt*(input.vert ? 8 : 3.5)));
+    if(skate){
+      if(input.trickEdge && !P.bt) startFlip(FLIP_BUTTONS[input.trickEdge]);
+      if(P.bt){ P.bt.prog += dt/P.bt.dur; if(P.bt.prog >= 1){ P.btDone.push(P.bt.name); P.bt = null; } }
+    }
     // landing assist: just before touchdown, ease into the nearest clean rotation
     const tl = timeToLand();
     if(tl < 0.4){
@@ -1674,7 +2030,7 @@ function step(dt){
     }
     P.spin += P.spinVel*dt;
     P.flip += P.flipVel*dt;
-    if(input.grab && P.airT > 0.1){ P.grab = input.grab; P.grabName = input.grab; P.grabT += dt; } else P.grab = null;
+    if(!skate && input.grab && P.airT > 0.1){ P.grab = input.grab; P.grabName = input.grab; P.grabT += dt; } else P.grab = null;
     P.pitch = lerp(P.pitch, 0, 1-Math.exp(-dt*3));
     P.lean = lerp(P.lean, 0, 1-Math.exp(-dt*4)); P.leanV = 0;
     if(input.jumpEdge){
@@ -1685,13 +2041,14 @@ function step(dt){
   }
   const fx = Math.sin(P.heading), fz = Math.cos(P.heading);
   P.x += fx*P.speed*dt; P.z += fz*P.speed*dt;
-  P.x = clamp(P.x, -W/2-25, W/2+25);
+  P.x = skate ? clamp(P.x, -31, 31) : clamp(P.x, -W/2-25, W/2+25);   // the street ends at the sidewalks
   const gh = groundH(P.x, P.z);
   if(P.grounded){
     if(gh < P.y + (P.vy - G*dt)*dt - 0.03){ takeoff(); P.popped = false; P.y += P.vy*dt; if(P.vy > 4){ pose.hv += 1.6; P.squashV += 2.4; snowBurst(P.x, P.y, P.z, 6, 0.6); } }
     else { P.vy = clamp((gh - P.y)/dt, -60, 22); P.y = gh; }
   } else {
     P.y += P.vy*dt;
+    if(skate && P.vy <= 3 && tryGrind()) return;
     if(P.y <= gh){
       const impact = -Math.min(0,P.vy), aired = P.airT;
       P.y = gh; P.vy = Math.min(0,P.vy); land();
@@ -1711,14 +2068,83 @@ function step(dt){
       if(dx*dx+dz*dz < r*r && P.y < groundH(t.x,t.z)+7*t.s){ crash('tree'); break; }
     }
   }
+  collectFlakes(c, dt);
+  if(P.z >= c.L) finishPeak();
+}
+function collectFlakes(c, dt){
   const magR = 1.8 + pw('magnet')*6;
-  for(const f of c.flakes){
+  const [flo, fhi] = c.flakes.length ? flakeWindow(P.z - magR - 25, P.z + magR + 25) : [0,0];
+  for(let fi=flo; fi<fhi; fi++){
+    const f = c.flakes[fi];
     if(f.got || Math.abs(f.z-P.z) > magR+2) continue;
     const dx=P.x-f.x, dy=(P.y+0.9)-f.y, dz=P.z-f.z, d=Math.hypot(dx,dy,dz);
     if(d < 1.7){ f.got = true; run.score += 25*(1+run.combo*0.5|0); Music.chime(); }
     else if(d < magR){ const k = Math.min(1, dt*10/d); f.x+=dx*k; f.y+=dy*k; f.z+=dz*k + P.speed*dt; }
   }
-  if(P.z >= c.L) finishPeak();
+}
+
+/* ---------- Snowskate: flips, grinds, manuals ---------- */
+function startFlip(name){
+  const t = FLIP_TRICKS[name]; if(!t || P.bt) return;
+  P.bt = { name, prog:0, rx:t.rx, ry:t.ry, dur:t.dur };
+}
+function tryGrind(){
+  const rails = course.rails;
+  for(let i=0;i<rails.length;i++){
+    const r = rails[i];
+    if(r.z0 > P.z + 1) break;                                   // sorted by start
+    if(P.z < r.z0 || P.z > r.z1 - 0.6) continue;
+    if(r === P.lastRail && P.railCool > 0) continue;
+    if(Math.abs(P.x - r.x) > r.w + 0.45) continue;
+    const ry = railAt(r, P.z).y;
+    if(P.y < ry - 0.35 || P.y > ry + 0.7) continue;
+    // a flip that's still turning when you hit the rail means you're on the board's edge
+    if(P.bt){ if(P.bt.prog < 0.7){ crash('bail'); return true; } P.btDone.push(P.bt.name); P.bt = null; }
+    const slide = Math.abs(Math.sin(P.spin)) > 0.5;
+    P.grind = { rail:r, slide, into: P.btDone.splice(0).join(' ') };
+    P.grindT = 0; P.bal = (Math.random()-.5)*0.2; P.balV = 0;
+    P.y = ry; P.vy = 0; P.grounded = false; P.spinVel = 0; P.flipVel = 0; P.airT = 0;
+    pose.hv -= 1.2; P.squashV -= 1.4;
+    for(let k=0;k<8;k++) emitSnow(P.x, P.y, P.z, rnd(-1.5,1.5), rnd(0.5,2), rnd(-1,1), rnd(0.15,0.3), rnd(0.3,0.6), 0);
+    return true;
+  }
+  return false;
+}
+function stepGrind(dt){
+  const g = P.grind, r = g.rail, here = railAt(r, P.z);
+  P.speed += -here.slope*G*dt*0.85 - (r.kind === 'rail' ? 0.5 : 1.0)*dt;
+  P.speed = clamp(P.speed, 3, 22);
+  P.z += P.speed*dt;
+  P.x = lerp(P.x, r.x, 1-Math.exp(-dt*20));
+  P.heading = lerp(P.heading, 0, 1-Math.exp(-dt*15));
+  const target = g.slide ? Math.round((P.spin - Math.PI/2)/Math.PI)*Math.PI + Math.PI/2 : Math.round(P.spin/Math.PI)*Math.PI;
+  P.spin = lerp(P.spin, target, 1-Math.exp(-dt*14));
+  const ny = railAt(r, P.z).y; P.vy = (ny - P.y)/dt; P.y = ny;
+  P.grindT += dt;
+  // balance drifts; lean the stick against it
+  P.balV += (P.bal*2.6 + (Math.random()-.5)*3.2)*dt - input.turn*4.2*dt; P.balV *= Math.exp(-2.5*dt); P.bal += P.balV*dt;
+  if(Math.random() < dt*14) emitSnow(P.x, P.y + 0.05, P.z, rnd(-1,1), rnd(0.3,1.2), -P.speed*0.2, rnd(0.12,0.25), rnd(0.3,0.5), 0);
+  if(Math.abs(P.bal) > 1){ P.grind = null; P.lastRail = r; P.railCool = 0.4; crash('bail'); return; }
+  if(input.jumpEdge || input.trickEdge){                          // pop out, maybe with a flip
+    endGrind(); P.vy = Math.max(P.vy, 0) + 5.6; P.popped = true; pose.hv += 2;
+    if(input.trickEdge) startFlip(FLIP_BUTTONS[input.trickEdge]);
+    return;
+  }
+  if(P.z >= r.z1) endGrind();
+}
+function endGrind(){
+  const g = P.grind; P.grind = null; P.lastRail = g.rail; P.railCool = 0.4;
+  const kind = g.slide ? (g.rail.kind === 'rail' ? 'Boardslide' : 'Noseslide') : (g.rail.kind === 'rail' ? '50-50' : '5-0 Grind');
+  const name = (g.into ? g.into + ' to ' : '') + kind;
+  scoreTrick([`${name} · ${P.grindT.toFixed(1)}s`], 150 + P.grindT*280 + (g.into ? 300 : 0), { quiet:true });
+  takeoff();
+  P.spinVel = (Math.round(P.spin/Math.PI)*Math.PI - P.spin)*4.5;    // turn back to straight on the way off
+  P.bal = 0;
+}
+function endManual(ok){
+  const t = P.manualT, type = P.manual; P.manual = null; P.bal = 0;
+  if(!ok){ scoreTrick([], 0, { sketchy:true }); return; }
+  if(t > 0.6) scoreTrick([`${type === 'nose' ? 'Nose Manual' : 'Manual'} · ${t.toFixed(1)}s`], t*180, { quiet:true });
 }
 
 function timeToLand(){
@@ -1743,19 +2169,24 @@ function placeCamera(dt, snap){
   }
   const yawT = P.heading;
   camYaw = snap ? yawT : lerp(camYaw, yawT, 1-Math.exp(-dt*3.2));
-  const air = !P.grounded && state==='ride';
-  const back = 7.5 + P.speed*0.06 + (air && P.bigAir ? Math.min(P.airT*4, 5) : 0);
-  const up = 3.2 + (air ? Math.min(P.airT*1.5, P.bigAir ? 4.5 : 2.5) : 0);
-  const tx = P.x - Math.sin(camYaw)*back, tz = P.z - Math.cos(camYaw)*back;
+  const air = !P.grounded && state==='ride' && !P.grind;
+  const skate = isSkate();
+  // a filmer, not a fixed rig: swings out to the side for a profile on big airs; on the snowskate it rides low and close
+  const back = skate ? 4.4 + P.speed*0.05 : 7.5 + P.speed*0.06 + (air && P.bigAir ? Math.min(P.airT*4, 5) : 0);
+  const up = skate ? 1.7 + (air ? Math.min(P.airT*1.2, 1.4) : 0) : 3.2 + (air ? Math.min(P.airT*1.5, P.bigAir ? 4.5 : 2.5) : 0);
+  const sideT = air && P.bigAir ? clamp(P.airT*2.5, 0, 1)*7 : skate ? 1.3 : 0;
+  P.camSide = lerp(P.camSide, sideT, 1-Math.exp(-dt*1.8));
+  const tx = P.x - Math.sin(camYaw)*back + Math.cos(camYaw)*P.camSide, tz = P.z - Math.cos(camYaw)*back - Math.sin(camYaw)*P.camSide;
   const ty = Math.max(P.y + up, groundH(tx,tz) + 2);
   const k = snap ? 1 : 1-Math.exp(-dt*6);
   camera.position.x = lerp(camera.position.x, tx, k);
   camera.position.y = lerp(camera.position.y, ty, snap ? 1 : 1-Math.exp(-dt*(air ? 7 : 4)));
   camera.position.z = lerp(camera.position.z, tz, k);
   if(shake>0 && !reduceMotion){ camera.position.x += (Math.random()-.5)*shake; camera.position.y += (Math.random()-.5)*shake; shake = Math.max(0, shake-dt*1.5); }
-  const ahead = air && P.bigAir ? 2 : 6;
-  camera.lookAt(P.x + Math.sin(P.heading)*ahead, P.y + 1.2, P.z + Math.cos(P.heading)*ahead);
-  const fovT = 64 + clamp(P.speed/38,0,1)*16;
+  const ahead = air && P.bigAir ? 2 : skate ? 3 : 6;
+  camera.lookAt(P.x + Math.sin(P.heading)*ahead, P.y + (skate ? 0.9 : 1.2), P.z + Math.cos(P.heading)*ahead);
+  if(!reduceMotion) camera.rotateZ(-P.lean*0.2);                  // the camera leans a touch into carves
+  const fovT = skate ? 78 + clamp(P.speed/16,0,1)*10 : 64 + clamp(P.speed/38,0,1)*16;
   camera.fov = lerp(camera.fov, fovT, 1-Math.exp(-dt*3)); camera.updateProjectionMatrix();
   backdrop.position.set(P.x, P.y, P.z);
 }
@@ -1773,17 +2204,26 @@ function updateRider(dt){
   rig.tips.forEach((tip, i) => { tip.getWorldPosition(tmpV); streaks[i].push(tmpV, tricking); streaks[i].draw(); });
   const t = performance.now();
   const blink = P.invuln>0 && state==='ride' && ((t/90)|0)%2;
-  for(const mesh of r.meshes) mesh.visible = !blink;
+  rig.model.visible = !blink;
+}
+/* crystals are sorted by distance down the hill, so only the stretch near the rider is touched */
+function flakeWindow(z0, z1){
+  const a = course.flakeZ; let lo = 0, hi = a.length;
+  while(lo < hi){ const m = (lo+hi)>>1; if(a[m] < z0) lo = m+1; else hi = m; }
+  let end = lo; while(end < a.length && a[end] < z1) end++;
+  return [lo, end];
+}
+function setFlake(i, f, t, s){
+  tmpQ.setFromAxisAngle(tmpV.set(0,1,0), t*2 + i);
+  tmpM.compose(tmpV.set(f.x, f.y + Math.sin(t*3+i)*0.15, f.z), tmpQ, tmpS.setScalar(s));
+  flakeMesh.setMatrixAt(i, tmpM); flakeOutline.setMatrixAt(i, tmpM);
 }
 function updateFlakes(t){
-  if(!flakeMesh) return;
+  if(!flakeMesh || !course.flakes.length) return;
   const pulse = 1 + Music.bassLevel()*0.7;
-  course.flakes.forEach((f,i) => {
-    const s = f.got ? 0 : pulse;
-    tmpQ.setFromAxisAngle(tmpV.set(0,1,0), t*2 + i);
-    tmpM.compose(tmpV.set(f.x, f.y + Math.sin(t*3+i)*0.15, f.z), tmpQ, tmpS.setScalar(s));
-    flakeMesh.setMatrixAt(i, tmpM); flakeOutline.setMatrixAt(i, tmpM);
-  });
+  const z = (state==='title' || state==='over') ? camera.position.z : P.z;
+  const [lo, hi] = flakeWindow(z - 20, z + 170);
+  for(let i=lo;i<hi;i++){ const f = course.flakes[i]; setFlake(i, f, t, f.got ? 0 : pulse); }
   flakeMesh.instanceMatrix.needsUpdate = true; flakeOutline.instanceMatrix.needsUpdate = true;
 }
 
@@ -1796,6 +2236,9 @@ function updateHud(dt){
   $('comboWrap').hidden = !(run.combo>1);
   $('comboLbl').textContent = run.combo>1 ? `COMBO ×${(1+(run.combo-1)*0.5).toFixed(1)}` : '';
   $('altLbl').textContent = Math.round(2600 + P.y).toLocaleString();
+  const balancing = state==='ride' && (P.grind || P.manual);
+  $('balance').hidden = !balancing;
+  if(balancing) $('balMark').style.left = `${50 + clamp(P.bal,-1,1)*50}%`;
   $('spdLbl').textContent = Math.round(P.speed*3.6);
   $('progFill').style.width = `${clamp(P.z/course.L,0,1)*100}%`;
   const l = Music.levels;
@@ -1807,9 +2250,22 @@ function updateHud(dt){
 /* ---------- Main loop ---------- */
 genCourse(1, 7); buildCourseMeshes();
 let last = performance.now(), speedFx = 0;
+// adaptive resolution: if frames run long for a couple of seconds, render fewer pixels; recover when there's headroom
+let perfT = 0, perfN = 0, perfSum = 0;
+function adaptResolution(rawDt){
+  perfSum += rawDt; perfN++; perfT += rawDt;
+  if(perfT < 2) return;
+  const avg = perfSum/perfN*1000; perfT = perfSum = perfN = 0;
+  let next = pixelRatio;
+  if(avg > 19 && pixelRatio > 0.7) next = Math.max(0.7, pixelRatio - 0.15);
+  else if(avg < 13 && pixelRatio < PR_MAX) next = Math.min(PR_MAX, pixelRatio + 0.1);
+  if(next !== pixelRatio){ pixelRatio = next; renderer.setPixelRatio(pixelRatio); resize(); }
+}
 function frame(now){
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  const rawDt = (now-last)/1000;
+  const dt = Math.min(0.05, rawDt); last = now;
+  if(rawDt < 0.25 && !document.hidden) adaptResolution(rawDt);
   readInput();
   // slow motion while flying off mega ramps and big cliffs
   const tsT = (state==='ride' && !P.grounded && P.bigAir && P.airT > 0.15) ? 0.62 : 1;
@@ -1834,6 +2290,7 @@ function frame(now){
   snowMat.uniforms.uScale.value = drawH*0.5/Math.tan(camera.fov*Math.PI/360);
   if(canPost && rt){
     postMat.uniforms.uSpeed.value = speedFx; postMat.uniforms.uTime.value = now/1000;
+    postMat.uniforms.uFish.value = lerp(postMat.uniforms.uFish.value, isSkate() && state!=='title' && state!=='over' ? 0.3 : 0, 1-Math.exp(-dt*3));
     renderer.setRenderTarget(rt); renderer.render(scene, camera);
     renderer.setRenderTarget(null); renderer.render(postScene, postCam);
   } else renderer.render(scene, camera);
