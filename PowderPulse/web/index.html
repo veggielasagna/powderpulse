@@ -1790,7 +1790,11 @@ const TRICKY_NEED = 6, TRICKY_TIME = 10;
 const Tricky = { meter:0, left:0, enabled: store('pp_tricky') !== 'off',
   get on(){ return this.left > 0; },
   speed(){ return this.on ? 1.35 : 1; }, spin(){ return this.on ? 1.55 : 1; },
-  add(){ if(!this.enabled || this.on || this.meter >= TRICKY_NEED) return; this.meter++; if(this.meter === TRICKY_NEED) popup('Tricky ready', padActive ? 'PRESS LT' : isTouch ? 'TAP THE METER' : 'PRESS T'); },
+  add(){
+    if(!this.enabled || this.on || this.meter >= TRICKY_NEED) return;
+    this.meter++;
+    if(this.meter === TRICKY_NEED) setTimeout(() => { if(state === 'ride' && !this.on && this.meter >= TRICKY_NEED) popup('Tricky ready', padActive ? 'PRESS LT' : isTouch ? 'TAP THE METER' : 'PRESS T'); }, 1100);
+  },
   start(){
     if(!this.enabled || this.on || this.meter < TRICKY_NEED || state !== 'ride') return;
     this.left = TRICKY_TIME; this.meter = 0;
@@ -1907,13 +1911,13 @@ function scoreTrick(names, pts, opts={}){
     return;
   }
   run.combo++;
-  Tricky.add();
   let mult = (1 + (run.combo-1)*0.5) * (opts.style ? 1.25 : 1);
   if(pw('bass') && run.combo>=3) mult *= 1.25;
   pts = Math.round(pts*mult/10)*10;
   run.score += pts;
   popup(names.join(' + '), `+${pts.toLocaleString()}${mult>1?`  ×${mult.toFixed(1)}`:''}${opts.style ? '  STYLE' : ''}`);
   Music.land(true); if(!reduceMotion && !opts.quiet) shake = Math.max(shake, 0.25);
+  Tricky.add();                     // after the trick's own popup, so "Tricky ready" isn't hidden by it
 }
 function land(){
   const air = P.airT, gT = P.grabT, gName = P.grabName;
