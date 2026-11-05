@@ -39,6 +39,20 @@ canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block}
 .sticker{color:var(--snow)}
 .peak{font-size:12px;font-weight:600;letter-spacing:.22em;color:var(--dim)}
 .hearts{display:flex;gap:6px}
+.tricky{position:relative;display:block;width:132px;height:18px;padding:0;margin-top:4px;border:none;border-radius:0;background:transparent;text-align:left;cursor:default;pointer-events:none}
+.tricky i{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--line);border-radius:2px}
+.tricky i::after{content:"";position:absolute;inset:0;width:var(--fill,0%);background:var(--amber);border-radius:2px;transition:width .25s}
+.tricky span{position:absolute;left:0;top:0;font-size:10px;font-weight:600;letter-spacing:.2em;color:var(--dim)}
+.tricky.ready{pointer-events:auto;cursor:pointer}
+.tricky.ready span,.tricky.on span{color:var(--amber)}
+.tricky.ready i{box-shadow:0 0 10px rgba(230,194,122,.7)}
+@media (prefers-reduced-motion:no-preference){.tricky.ready i{animation:trickyPulse 1.2s ease-in-out infinite}}
+@keyframes trickyPulse{50%{box-shadow:0 0 2px rgba(230,194,122,.3)}}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.opt b{font-weight:600;letter-spacing:.06em}
+.opt p{font-size:13px;margin-top:4px}
+.opt button{min-width:76px}
+.opt button[aria-pressed="true"]{border-color:var(--amber);color:var(--amber)}
 .heart{width:7px;height:7px;border-radius:50%;background:var(--rose)}
 .heart.off{background:transparent;box-shadow:inset 0 0 0 1px var(--dim)}
 .score{font-size:26px;font-weight:500;letter-spacing:.04em}
@@ -132,6 +146,7 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
   <div class="tl">
     <div class="sticker peak"><span id="peakLbl">PEAK 1</span></div>
     <div class="hearts" id="hearts"></div>
+    <button class="tricky" id="tricky" tabindex="-1" aria-label="Tricky meter"><i id="trickyFill"></i><span id="trickyLbl">TRICKY</span></button>
   </div>
   <div class="tr">
     <div class="sticker score"><span id="scoreLbl">0</span></div>
@@ -178,12 +193,14 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
       <button class="primary" id="btnFree">FREE RIDE</button>
       <button class="primary" id="btnSkate">SNOWSKATE</button>
       <button id="btnMusic">MUSIC: <span id="srcLbl">DEMO TRACK</span></button>
+      <button id="btnOptions">OPTIONS</button>
     </div>
     <div class="meta"><span>Best run <b id="bestLbl">0</b></span><span>Best peak <b id="bestPeakLbl">0</b></span></div>
     <div class="keys">
       <b>Snowboard</b> left stick steer · stick down tuck · A jump (tap at the lip for extra pop) · in the air: stick spins and flips; hold X Indy, B Method, LB Tail, RB Nose · on the snow: hold LB/RB to press, steer while pressing to butter · RT tuck · Y next song · Menu pause<br>
       <b>Snowskate</b> RT push · A ollie onto rails and ledges · X kickflip · B heelflip · LB shove-it · RB tre flip · stick up/down manual · stick left/right to balance grinds<br>
-      <b>Keyboard</b> arrows / WASD · Space jump · J K Q E tricks and grabs · Shift tuck or push · N next song · Esc pause
+      <b>Tricky mode</b> land six tricks to fill the meter, then press LT for 10 seconds of extra speed and faster spins<br>
+      <b>Keyboard</b> arrows / WASD · Space jump · J K Q E tricks and grabs · Shift tuck or push · T Tricky mode · N next song · Esc pause
     </div>
   </div>
 </div>
@@ -244,9 +261,22 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
       <button class="primary" id="btnResume">RESUME</button>
       <button id="btnNewMtn" hidden>NEW MOUNTAIN</button>
       <button id="btnPauseMusic">MUSIC</button>
+      <button id="btnPauseOptions">OPTIONS</button>
       <button id="btnSkip">NEXT SONG</button>
       <button id="btnQuit">QUIT RUN</button>
     </div>
+  </div>
+</div>
+
+<!-- Options -->
+<div class="screen" id="scrOptions" hidden>
+  <div class="panel" style="max-width:460px">
+    <h2>Options</h2>
+    <div class="opt">
+      <div><b>Tricky meter</b><p>Fills as you land six tricks. Press LT (T on a keyboard, or tap the meter) for 10 seconds of faster riding and quicker spins.</p></div>
+      <button id="optTricky" aria-pressed="true">ON</button>
+    </div>
+    <div class="row"><button class="primary" id="btnOptionsBack">DONE</button></div>
   </div>
 </div>
 
@@ -1445,7 +1475,7 @@ const Music = {
   },
   update(dt, s){
     if(!this.ctx) return;
-    let lp, hp, wet, duck = 1, bass = Math.min(s.combo*1.6, 9) * (s.bassPow ? 1.6 : 1);
+    let lp, hp, wet, duck = 1, bass = Math.min(s.combo*1.6, 9) * (s.bassPow ? 1.6 : 1) + (s.tricky ? 4 : 0);
     if(s.mode === 'ride'){
       hp = 25 + s.alt*s.alt*520;
       wet = 0.07 + s.alt*0.28;
@@ -1725,7 +1755,7 @@ let camYaw = 0, orbitT = 0, shake = 0;
 const pw = k => run.powers[k]||0;
 
 function showScreen(id){
-  for(const s of ['scrTitle','scrMusic','scrPick','scrPause','scrOver']) $(s).hidden = s!==id;
+  for(const s of ['scrTitle','scrMusic','scrPick','scrPause','scrOver','scrOptions']) $(s).hidden = s!==id;
   const inGame = id===null;
   $('hud').hidden = !(inGame || id==='scrPause' || id==='scrPick');
   if(!inGame) $('balance').hidden = true;
@@ -1734,6 +1764,39 @@ function showScreen(id){
   menuFocus = 0; focusMenu();
 }
 const isFree = () => run.mode === 'free' || run.mode === 'skate';
+/* Tricky mode: six clean tricks fill the meter; LT spends it for 10 s of extra speed and faster rotation */
+const TRICKY_NEED = 6, TRICKY_TIME = 10;
+const Tricky = { meter:0, left:0, enabled: store('pp_tricky') !== 'off',
+  get on(){ return this.left > 0; },
+  speed(){ return this.on ? 1.35 : 1; }, spin(){ return this.on ? 1.55 : 1; },
+  add(){ if(!this.enabled || this.on || this.meter >= TRICKY_NEED) return; this.meter++; if(this.meter === TRICKY_NEED) popup('Tricky ready', padActive ? 'PRESS LT' : isTouch ? 'TAP THE METER' : 'PRESS T'); },
+  start(){
+    if(!this.enabled || this.on || this.meter < TRICKY_NEED || state !== 'ride') return;
+    this.left = TRICKY_TIME; this.meter = 0;
+    popup('Tricky mode', '10 SECONDS'); P.squashV += 2;
+  },
+  tick(dt){ if(this.left > 0){ this.left = Math.max(0, this.left - dt); if(!this.left) popup('', 'TRICKY MODE OVER'); } },
+  reset(full){ this.left = 0; if(full) this.meter = 0; }
+};
+function renderTricky(){
+  const el = $('tricky');
+  el.hidden = !Tricky.enabled;
+  if(!Tricky.enabled) return;
+  const fill = Tricky.on ? Tricky.left/TRICKY_TIME : Tricky.meter/TRICKY_NEED;
+  el.style.setProperty('--fill', (fill*100).toFixed(1) + '%');
+  const ready = !Tricky.on && Tricky.meter >= TRICKY_NEED;
+  el.classList.toggle('ready', ready); el.classList.toggle('on', Tricky.on);
+  $('trickyLbl').textContent = Tricky.on ? `TRICKY ${Math.ceil(Tricky.left)}` : ready ? (padActive ? 'TRICKY · LT' : isTouch ? 'TRICKY · TAP' : 'TRICKY · T') : 'TRICKY';
+}
+$('tricky').addEventListener('click', () => Tricky.start());
+function setTrickyOption(on){
+  Tricky.enabled = on; store('pp_tricky', on ? 'on' : 'off');
+  if(!on) Tricky.reset(true);
+  $('optTricky').textContent = on ? 'ON' : 'OFF'; $('optTricky').setAttribute('aria-pressed', String(on));
+  renderTricky();
+}
+let optionsReturn = 'scrTitle';
+function openOptions(from){ optionsReturn = from; setTrickyOption(Tricky.enabled); showScreen('scrOptions'); }
 const isSkate = () => run.mode === 'skate';
 /* Snowskate flip tricks: the board turns under your feet while you stay upright */
 const FLIP_TRICKS = {
@@ -1743,9 +1806,9 @@ const FLIP_TRICKS = {
   'Tre Flip':     { rx: -TAU, ry: TAU,  dur: 0.5,  pts: 620 }
 };
 const FLIP_BUTTONS = { x:'Kickflip', b:'Heelflip', lb:'Pop Shove-it', rb:'Tre Flip' };
-function startRun(){ run = { mode:'run', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; startPeak(); }
-function startFree(){ run = { mode:'free', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; startPeak(); }
-function startSkate(){ run = { mode:'skate', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; startPeak(); }
+function startRun(){ run = { mode:'run', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; Tricky.reset(true); startPeak(); }
+function startFree(){ run = { mode:'free', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; Tricky.reset(true); startPeak(); }
+function startSkate(){ run = { mode:'skate', peak:1, score:0, hearts:3, maxHearts:3, powers:{}, combo:0 }; Tricky.reset(true); startPeak(); }
 /* the rider dresses for the mode: puffer and snowboard on the mountain, hoodie, baggy denim and a snowskate in the street */
 function setOutfit(skate){
   const M = rig.M;
@@ -1757,6 +1820,7 @@ function setOutfit(skate){
   else { set(M.jacket, 0x4f93a6, 0x264f66); set(M.jacket2, 0xe6c27a, 0x8f7140); set(M.pants, 0x3d3966, 0x211f3b); set(M.boots, 0xd6dcee, 0x6f78a6); set(M.mitt, 0xe6c27a, 0x8f7140); }
 }
 function startPeak(){
+  Tricky.reset(false);
   genCourse(run.peak, (Math.random()*1e9)|0, isFree(), isSkate());
   if(isFree()){ course.flakes = []; course.flakeZ = new Float32Array(0); }   // no gems in Free Ride or Snowskate
   setOutfit(isSkate());
@@ -1813,6 +1877,7 @@ function scoreTrick(names, pts, opts={}){
     return;
   }
   run.combo++;
+  Tricky.add();
   let mult = (1 + (run.combo-1)*0.5) * (opts.style ? 1.25 : 1);
   if(pw('bass') && run.combo>=3) mult *= 1.25;
   pts = Math.round(pts*mult/10)*10;
@@ -1910,6 +1975,7 @@ addEventListener('keydown', e => {
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
   if(e.code==='Escape' || e.code==='KeyP') togglePause();
   if(e.code==='KeyN') Music.next();
+  if(e.code==='KeyT' && state==='ride') Tricky.start();
   if(state==='pick' && /^Digit[123]$/.test(e.code)){ const b=$('pick'+(+e.code.slice(-1)-1)); if(b) b.click(); }
 });
 addEventListener('keyup', e => keys.delete(e.code));
@@ -1943,14 +2009,14 @@ function readInput(){
     if(btn(7)) tuck = true;
     if(btn(0)) jump = true;
     if(btn(2)) tb.x = true; if(btn(1)) tb.b = true; if(btn(4)) tb.lb = true; if(btn(5)) tb.rb = true;
-    for(const i of [0,1,2,3,4,5,9,12,13,14,15]) now[i] = now[i] || btn(i);
+    for(const i of [0,1,2,3,4,5,6,9,12,13,14,15]) now[i] = now[i] || btn(i);
     if(Object.values(now).some(Boolean) || ax || ay){ if(!padActive){ padActive = true; $('touch').hidden = true; } }
     break;
   }
   const edge = i => now[i] && !prevPad[i];
   if(edge(9)) togglePause();
-  const inMenu = ['scrTitle','scrMusic','scrPick','scrPause','scrOver'].some(s => !$(s).hidden);
-  if(!inMenu && state==='ride'){ if(edge(3)) Music.next(); }
+  const inMenu = ['scrTitle','scrMusic','scrPick','scrPause','scrOver','scrOptions'].some(s => !$(s).hidden);
+  if(!inMenu && state==='ride'){ if(edge(3)) Music.next(); if(edge(6)) Tricky.start(); }
   if(inMenu){
     // one step per press; holding a direction repeats so long song lists scroll quickly
     let dir = Math.abs(steer)>0.6 ? Math.sign(steer) : (Math.abs(vert)>0.6 ? Math.sign(vert) : 0);
@@ -1967,6 +2033,7 @@ function readInput(){
     if(edge(1)){
       if(!$('scrMusic').hidden){ if(!libBack()) $('btnMusicBack').click(); }
       else if(!$('scrPause').hidden) $('btnResume').click();
+      else if(!$('scrOptions').hidden) $('btnOptionsBack').click();
     }
   }
   prevPad = now;
@@ -1981,7 +2048,7 @@ function readInput(){
 }
 let menuFocus = 0, menuHeldDir = 0, menuRepeatAt = 0;
 function focusables(){
-  const scr = ['scrTitle','scrMusic','scrPick','scrPause','scrOver'].map($).find(s=>!s.hidden);
+  const scr = ['scrTitle','scrMusic','scrPick','scrPause','scrOver','scrOptions'].map($).find(s=>!s.hidden);
   return scr ? [...scr.querySelectorAll('button, input[type=text]')].filter(b => b.offsetParent!==null && b.tabIndex !== -1 && !b.disabled) : [];
 }
 function moveFocus(d){ const f = focusables(); if(!f.length) return; menuFocus = clamp(menuFocus + d, 0, f.length-1); focusMenu(); }
@@ -2020,6 +2087,10 @@ $('btnMusic').addEventListener('click', () => openMusic('scrTitle'));
 $('btnPauseMusic').addEventListener('click', () => openMusic('scrPause'));
 $('btnMusicBack').addEventListener('click', () => { Lib.drill = null; showScreen(musicReturn); });
 $('btnResume').addEventListener('click', togglePause);
+$('btnOptions').addEventListener('click', () => openOptions('scrTitle'));
+$('btnPauseOptions').addEventListener('click', () => openOptions('scrPause'));
+$('optTricky').addEventListener('click', () => setTrickyOption(!Tricky.enabled));
+$('btnOptionsBack').addEventListener('click', () => showScreen(optionsReturn));
 $('btnSkip').addEventListener('click', () => Music.next());
 $('btnQuit').addEventListener('click', () => { if(isFree()) $('btnTitle').click(); else gameOver(); });
 $('btnAgain').addEventListener('click', () => { Music.play(); startRun(); });
@@ -2043,6 +2114,7 @@ function step(dt){
     return;
   }
   if(state!=='ride') return;
+  Tricky.tick(dt);
   P.invuln = Math.max(0, P.invuln-dt);
   const skate = isSkate();
   if(skate){
@@ -2070,9 +2142,10 @@ function step(dt){
     const slope = dh/1.2;
     if(skate){
       // snowskate: push to keep rolling, gentle top speed, manuals on the tail or nose
-      const maxV = 15;
+      const maxV = 15*Tricky.speed();
       P.speed += -slope*G*dt;
-      if(input.tuck && P.speed < 13 && !P.manual){ P.speed += 7*dt; P.pushT += dt; } else P.pushT = 0;
+      if(input.tuck && P.speed < 13*Tricky.speed() && !P.manual){ P.speed += 7*Tricky.speed()*dt; P.pushT += dt; } else P.pushT = 0;
+      if(Tricky.on && P.speed < 13*Tricky.speed()) P.speed += 3.5*dt;
       P.speed -= (0.9 + Math.abs(input.turn)*P.speed*0.18 + (P.speed>maxV ? (P.speed-maxV)*1.5 : 0))*dt;
       P.speed = clamp(P.speed, 2, 24);
       const want = input.vert < -0.6 ? 'tail' : input.vert > 0.6 ? 'nose' : null;
@@ -2086,8 +2159,9 @@ function step(dt){
         }
       }
     } else {
-      const maxV = (input.tuck ? 38*(1+0.12*pw('turbo')) : 30);
+      const maxV = (input.tuck ? 38*(1+0.12*pw('turbo')) : 30)*Tricky.speed();
       P.speed += -slope*G*dt;
+      if(Tricky.on && P.speed < maxV) P.speed += 5*dt;
       P.speed -= (0.6 + Math.abs(input.turn)*P.speed*0.22 + (P.speed>maxV ? (P.speed-maxV)*1.5 : 0) + 0.008*P.speed*P.speed*(input.tuck?0.55:1))*dt;
       P.speed = clamp(P.speed, 3, 60);
     }
@@ -2102,13 +2176,13 @@ function step(dt){
     }
   } else {
     P.airT += dt;
-    const spinRate = 7.4*(1+0.35*pw('whirl')), flipRate = 5.8*(1+0.25*pw('whirl'));
+    const spinRate = 7.4*(1+0.35*pw('whirl'))*Tricky.spin(), flipRate = 5.8*(1+0.25*pw('whirl'))*Tricky.spin();
     // spins and flips build up and carry momentum, so they whip around instead of snapping
     P.spinVel += (input.turn*spinRate - P.spinVel)*(1-Math.exp(-dt*(input.turn ? 7 : 3)));
     if(!skate) P.flipVel += (-input.vert*flipRate - P.flipVel)*(1-Math.exp(-dt*(input.vert ? 8 : 3.5)));
     if(skate){
       if(input.trickEdge && !P.bt) startFlip(FLIP_BUTTONS[input.trickEdge]);
-      if(P.bt){ P.bt.prog += dt/P.bt.dur; if(P.bt.prog >= 1){ P.btDone.push(P.bt.name); P.bt = null; } }
+      if(P.bt){ P.bt.prog += dt*Tricky.spin()/P.bt.dur; if(P.bt.prog >= 1){ P.btDone.push(P.bt.name); P.bt = null; } }
     }
     // landing assist: just before touchdown, ease into the nearest clean rotation
     const tl = timeToLand();
@@ -2293,7 +2367,7 @@ function updateRider(dt){
   // cartoon squash and stretch: stretch on takeoff, squash on landing, spring back
   P.squashV += (-P.squash)*140*dt; P.squashV *= Math.exp(-10*dt); P.squash = clamp(P.squash + P.squashV*dt, -0.32, 0.3);
   r.flipG.scale.set(1 - P.squash*0.5, 1 + P.squash, 1 - P.squash*0.5);
-  const tricking = state==='ride' && !P.grounded && P.airT > 0.12 && (Math.abs(P.spinVel) > 2 || Math.abs(P.flipVel) > 2 || P.grab || P.airT > 0.8);
+  const tricking = state==='ride' && ((!P.grounded && P.airT > 0.12 && (Math.abs(P.spinVel) > 2 || Math.abs(P.flipVel) > 2 || P.grab || P.airT > 0.8)) || (Tricky.on && !P.grounded));
   rig.tips.forEach((tip, i) => { tip.getWorldPosition(tmpV); streaks[i].push(tmpV, tricking); streaks[i].draw(); });
   const t = performance.now();
   const blink = P.invuln>0 && state==='ride' && ((t/90)|0)%2;
@@ -2336,6 +2410,7 @@ function updateHud(dt){
   $('progFill').style.width = `${clamp(P.z/course.L,0,1)*100}%`;
   const l = Music.levels;
   eqBars.forEach((b,i) => b.style.height = `${8 + (l[i+1]||0)/255*92}%`);
+  renderTricky();
   const fx = Music.fx;
   $('fxLbl').textContent = `LP ${fx.lp>=1000?(fx.lp/1000).toFixed(1)+'k':Math.round(fx.lp)} · HP ${Math.round(fx.hp)} · VERB ${Math.round(fx.wet*100)}% · BASS +${Math.round(fx.bass)}dB${Music.rate<0.97?` · TAPE ${Math.round(Music.rate*100)}%`:''}`;
 }
@@ -2376,7 +2451,7 @@ function frame(now){
   placeCamera(gdt, false);
   if(popTimer>0){ popTimer -= dt; if(popTimer<=0) $('popup').classList.remove('show'); }
   const alt = course.yTop!==course.yEnd ? clamp((P.y - course.yEnd)/(course.yTop - course.yEnd),0,1) : 0.5;
-  Music.update(dt, { alt, speedN: clamp(P.speed/38,0,1), air: !P.grounded && P.airT>0.12, airT:P.airT, combo:run.combo, bassPow:pw('bass')>0, mode: state==='ride'||state==='crash' ? state : (state==='pause'?'pause':'menu') });
+  Music.update(dt, { alt, speedN: clamp(P.speed/38,0,1), air: !P.grounded && P.airT>0.12, airT:P.airT, combo:run.combo, bassPow:pw('bass')>0, tricky:Tricky.on, mode: state==='ride'||state==='crash' ? state : (state==='pause'?'pause':'menu') });
   if(state==='ride'||state==='crash'||state==='pause') updateHud(dt);
   const sfx = state==='ride' && !reduceMotion ? clamp((P.speed-22)/14, 0, 1) : 0;
   speedFx = lerp(speedFx, sfx, 1-Math.exp(-dt*4));
@@ -2390,7 +2465,7 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 showScreen('scrTitle');
-window.__pp = { P, run, get state(){return state;}, startRun, Music };
+window.__pp = { P, run, get state(){return state;}, startRun, Music, Tricky };
 })();
 </script>
 

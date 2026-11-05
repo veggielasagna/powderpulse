@@ -29,10 +29,38 @@ for (const [mode, button, viewport] of [
   await page.waitForTimeout(1500);
   const s2 = await page.evaluate(() => { const p = window.__pp; return p ? +p.P.z.toFixed(1) : null; });
   const moving = s && s2 !== null && s2 !== s.z;
+  // Tricky mode: charge the meter, press T, and make sure it runs and speeds things up
+  const tricky = await page.evaluate(async () => {
+    const p = window.__pp; if(!p || !p.Tricky) return 'missing';
+    p.Tricky.meter = 6;
+    document.dispatchEvent(new KeyboardEvent('keydown', { code:'KeyT', bubbles:true })); window.dispatchEvent(new KeyboardEvent('keydown', { code:'KeyT' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { code:'KeyT' }));
+    await new Promise(r => setTimeout(r, 1200));
+    return p.Tricky.on ? `on, ${p.Tricky.left.toFixed(1)}s left, meter ${p.Tricky.meter}` : `NOT ON (state ${p.state}, meter ${p.Tricky.meter})`;
+  });
+  if(String(tricky).startsWith('NOT') || tricky === 'missing') failed = true;
+  console.log(`   tricky: ${tricky}`);
   console.log(`== ${mode}: state=${s && s.state} z=${s && s.z} -> ${s2} ${moving ? 'moving' : 'NOT MOVING'} y=${s && s.y} speed=${s && s.speed}`);
   const shown = [...new Set(problems)].slice(0, 25);
   shown.forEach(p => console.log('   ' + p.split('\n').slice(0, 6).join('\n      ')));
   if (problems.some(p => p.startsWith('PAGE ERROR')) || !moving) failed = true;
+  await page.close();
+}
+// Options: turning the meter off hides it and is remembered after a reload
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const problems = [];
+  page.on('pageerror', e => problems.push('PAGE ERROR: ' + (e.stack || e.message)));
+  await page.goto(base); await page.waitForTimeout(2000);
+  await page.click('#btnOptions'); await page.waitForTimeout(300);
+  await page.screenshot({ path: 'tests/shots/options.png' });
+  await page.click('#optTricky'); await page.waitForTimeout(200);
+  const label = await page.textContent('#optTricky');
+  await page.reload(); await page.waitForTimeout(2000);
+  const after = await page.evaluate(() => window.__pp.Tricky.enabled);
+  console.log(`== options: switch shows ${label}, after reload enabled=${after}`);
+  problems.forEach(p => console.log('   ' + p.split('\n').slice(0,6).join('\n      ')));
+  if(label !== 'OFF' || after !== false || problems.length) failed = true;
   await page.close();
 }
 await browser.close();
