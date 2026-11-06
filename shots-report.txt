@@ -1,0 +1,13 @@
+   tricky: on, 9.5s left, meter 0
+== skate-phone: state=ride z=34.1 -> 55.6 moving y=-2.94 speed=13.2
+   tricky: on, 9.7s left, meter 0
+== skate-tv: state=ride z=14.5 -> 23.9 moving y=-1.32 speed=10.4
+   tricky: on, 9.8s left, meter 0
+== free: state=ride z=17.8 -> 29.8 moving y=-4.79 speed=11.7
+   tricky: on, 9.7s left, meter 0
+== run: state=ride z=17.3 -> 32 moving y=-2.06 speed=11.3
+== options: switch shows OFF, after reload enabled=false
+== trees: off -> title 0, free ride 0; back on mid-ride -> 1003 trees, state ride, moving
+== shuffle: default true, switched to "SHUFFLE OFF", after reload false
+== menu nav: {"start":"row 0","down2":"row 2","page":"row 5","pageBack":"row 0","upOut":"libSearch","up2":"songs","right":"artists","backDown":"row 0","tab":"artists / row 0","tabRow":"row 1"}
+RESULT: ALL MODES RUN
