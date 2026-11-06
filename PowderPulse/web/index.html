@@ -1813,7 +1813,6 @@ function showScreen(id){
   $('progress').hidden = $('hud').hidden;
   $('touch').hidden = !(inGame && isTouch && !padActive);
   menuFocus = 0; menuEl = null;
-  if(id === 'scrMusic'){ const rows = focusables().filter(isRow); if(rows.length){ setFocus(rows[0]); return; } }
   focusMenu();
 }
 const isFree = () => run.mode === 'free' || run.mode === 'skate';
@@ -2230,7 +2229,11 @@ $('btnFree').addEventListener('click', () => begin($('btnFree'), startFree));
 $('btnSkate').addEventListener('click', () => begin($('btnSkate'), startSkate));
 $('btnNewMtn').addEventListener('click', () => { run.peak++; startPeak(); });
 let musicReturn = 'scrTitle';
-function openMusic(from){ musicReturn = from; showScreen('scrMusic'); renderLib(); }
+function openMusic(from){
+  musicReturn = from; showScreen('scrMusic'); renderLib();
+  $('libList').scrollTop = 0;
+  const rows = focusables().filter(isRow); if(rows.length) setFocus(rows[0]);   // start on your songs
+}
 $('btnMusic').addEventListener('click', () => openMusic('scrTitle'));
 $('btnPauseMusic').addEventListener('click', () => openMusic('scrPause'));
 $('btnMusicBack').addEventListener('click', () => { Lib.drill = null; showScreen(musicReturn); });
