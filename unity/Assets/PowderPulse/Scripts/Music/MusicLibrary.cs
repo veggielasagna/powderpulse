@@ -52,6 +52,7 @@ namespace PowderPulse.Music
             if (Playable.Contains(ext)) return true;
             if (CanConvert && Convertible.Contains(ext)) { convert = true; return true; }
             Skipped++;
+            lock (skippedKinds) { skippedKinds.TryGetValue(ext, out int n); skippedKinds[ext] = n + 1; }
             return false;
         }
         static readonly Regex AllSongs = new Regex(@"^(all\s*(music|songs|tracks|audio)|songs|tracks)$", RegexOptions.IgnoreCase);
@@ -59,6 +60,8 @@ namespace PowderPulse.Music
         static readonly Regex NotMusic = new Regex(@"photo|picture|image|video|movie|film|tv|recording|playlist", RegexOptions.IgnoreCase);
 
         public static int Skipped { get; private set; }
+        static readonly Dictionary<string, int> skippedKinds = new Dictionary<string, int>();
+        public static string SkippedKinds { get { lock (skippedKinds) return string.Join(", ", skippedKinds.OrderByDescending(k => k.Value).Select(k => $"{(k.Key == "" ? "unknown" : k.Key)} {k.Value}")); } }
 
         public static AudioType TypeFor(string ext)
         {
@@ -86,7 +89,7 @@ namespace PowderPulse.Music
         }
 
         // ---------- NAS ----------
-        public static void ResetCounts() => Skipped = 0;
+        public static void ResetCounts() { Skipped = 0; lock (skippedKinds) skippedKinds.Clear(); }
 
         public static async Task<List<Song>> ScanNas(Action<string> status)
         {
@@ -166,6 +169,7 @@ namespace PowderPulse.Music
                         if (Playable.Contains(e2)) { url = r.Key; ext = e2; break; }
                     }
                 }
+                if (ext == "" && !string.IsNullOrEmpty(o.Mime)) ext = o.Mime;   // shows up in the skipped list as its mime type
                 if (!Accept(ext, out bool convert)) continue;
                 found.Add(new Song { Title = o.Title, Artist = o.Artist, Album = o.Album, Genre = o.Genre, Track = o.Track, Duration = o.Duration, Url = url, Ext = ext, Convert = convert });
             }

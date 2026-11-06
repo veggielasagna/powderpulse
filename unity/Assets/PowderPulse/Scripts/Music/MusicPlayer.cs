@@ -97,7 +97,7 @@ namespace PowderPulse.Music
                 if (nas.Count > 0) { SetLibrary(nas); Status = Summary(); }
                 var usb = await usbT;
                 UsbCount = usb.Count;
-                Debug.Log($"Music found: {nas.Count} on the NAS, {usb.Count} on USB, {MusicLibrary.Skipped} skipped (format not supported yet)");
+                Debug.Log($"Music found: {nas.Count} on the NAS, {usb.Count} on USB, {MusicLibrary.Skipped} skipped: {MusicLibrary.SkippedKinds}");
                 if (usb.Count > 0) { var all = new List<Song>(nas); all.AddRange(usb); SetLibrary(all); }
                 if (nas.Count + usb.Count == 0)
                 {
