@@ -48,4 +48,4 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 Web version: push to `main` (outside `unity/`) → `.github/workflows/build.yml` on windows-2022 → artifact `Powder-Pulse-1.0.<run>.0-install` (sideload .msix + dependency .appx files + HOW-TO-INSTALL.txt). Same pipeline as WMC SX. Nothing compiles locally; CI is the compile check.
 
 ## Next
-- Nothing queued.
+- Unity Xbox export: needs Windows with Unity Hub signed in (see Unity section).
