@@ -30,6 +30,7 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 - Font: the Xbox build downloads Chakra Petch into `web/fonts` and swaps the Google Fonts link for `fonts.css`, so it looks right offline (falls back to the online link if that step fails).
 - Errors show as a small on-screen note and go to the Xbox log (`reportError`).
 - Camera: always directly behind the rider (the owner asked for no side swings or filmer angles).
+- Menus with a controller: `navMove(dir)` moves to the nearest button in the pushed direction (song list rows go one by one; only visible rows count from outside the list); holding repeats at 90→55→30 ms. Music screen: opens on the first song, LB/RB switch tabs (`libTabStep`), LT/RT jump a page (`libPage`), focus stays on the same row number when the list redraws (`menuEl`). Covered by the browser check (`__pp.menu`).
 - Controls: X/B/LB/RB are one set of trick buttons: snowboard grabs (Indy/Method/Tail/Nose) in the air, LB/RB presses and butters on the snow; snowskate flips (Kickflip/Heelflip/Shove-it/Tre). Stick up/down = flips (snowboard air) or manuals (snowskate ground).
 - Performance: adaptive resolution (`adaptResolution`), crystals updated only near the rider (`flakeWindow`), audio automation only when a target moves (`Music.set`).
 

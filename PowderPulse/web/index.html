@@ -236,7 +236,7 @@ input[type=text]:focus,input[type=text].focus{outline:none;border-color:var(--te
     <div class="crumb" id="libCrumb"></div>
     <div class="liblist" id="libList"></div>
     <div class="row" id="libActions"></div>
-    <div class="keys" id="libKeys"><b>A</b> add or open · <b>X</b> play now · <b>B</b> back</div>
+    <div class="keys" id="libKeys"><b>A</b> add or open · <b>X</b> play now · <b>B</b> back · <b>LB RB</b> tabs · <b>LT RT</b> page</div>
     <div class="row"><button class="primary" id="btnMusicBack">DONE</button></div>
   </div>
   <input type="file" id="fileIn" accept="audio/*,.mp3,.m4a,.flac,.ogg,.wav,.aac" multiple hidden>
@@ -1752,7 +1752,7 @@ function libActivate(el, playNow){
   const r = libRows[+el.dataset.r]; if(!r) return;
   if(r.group){
     if(playNow){ queueSongs(r.group.songs, labelFor(r.group.name), shuffleOn, true, 'custom'); afterQueue(); return; }
-    Lib.drill = { name:r.group.name, songs:r.group.songs, label:labelFor(r.group.name) }; $('libSearch').value = ''; menuFocus = 0; renderLib(); return;
+    Lib.drill = { name:r.group.name, songs:r.group.songs, label:labelFor(r.group.name) }; $('libSearch').value = ''; menuEl = null; renderLib(); $('libList').scrollTop = 0; { const rows = focusables().filter(isRow); if(rows.length) setFocus(rows[0]); } return;
   }
   if(playNow){
     // play this song now; the rest follows in order, or mixed up when Shuffle is on
@@ -1773,7 +1773,7 @@ function currentLabel(){
 }
 function labelFor(name){ const t = { artists:'ARTIST', albums:'ALBUM', genres:'GENRE', years:'YEAR' }[Lib.tab] || ''; return (t ? t + ': ' : '') + name.toUpperCase(); }
 function libBack(){
-  if(Lib.drill){ Lib.drill = null; menuFocus = 0; renderLib(); return true; }
+  if(Lib.drill){ Lib.drill = null; menuEl = null; renderLib(); { const rows = focusables().filter(isRow); if(rows.length) setFocus(rows[0]); } return true; }
   return false;
 }
 $('libTabs').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; Lib.tab = b.dataset.tab; Lib.drill = null; $('libSearch').value=''; renderLib(); });
@@ -1812,7 +1812,9 @@ function showScreen(id){
   if(!inGame) $('balance').hidden = true;
   $('progress').hidden = $('hud').hidden;
   $('touch').hidden = !(inGame && isTouch && !padActive);
-  menuFocus = 0; focusMenu();
+  menuFocus = 0; menuEl = null;
+  if(id === 'scrMusic'){ const rows = focusables().filter(isRow); if(rows.length){ setFocus(rows[0]); return; } }
+  focusMenu();
 }
 const isFree = () => run.mode === 'free' || run.mode === 'skate';
 /* Tricky mode: six clean tricks fill the meter; LT spends it for 10 s of extra speed and faster rotation */
@@ -2073,7 +2075,7 @@ function readInput(){
     if(btn(7)) tuck = true;
     if(btn(0)) jump = true;
     if(btn(2)) tb.x = true; if(btn(1)) tb.b = true; if(btn(4)) tb.lb = true; if(btn(5)) tb.rb = true;
-    for(const i of [0,1,2,3,4,5,6,9,12,13,14,15]) now[i] = now[i] || btn(i);
+    for(const i of [0,1,2,3,4,5,6,7,9,12,13,14,15]) now[i] = now[i] || btn(i);
     if(Object.values(now).some(Boolean) || ax || ay){ if(!padActive){ padActive = true; $('touch').hidden = true; } }
     break;
   }
@@ -2082,18 +2084,28 @@ function readInput(){
   const inMenu = ['scrTitle','scrMusic','scrPick','scrPause','scrOver','scrOptions'].some(s => !$(s).hidden);
   if(!inMenu && state==='ride'){ if(edge(3)) Music.next(); if(edge(6)) Tricky.start(); }
   if(inMenu){
-    // one step per press; holding a direction repeats so long song lists scroll quickly
-    let dir = Math.abs(steer)>0.6 ? Math.sign(steer) : (Math.abs(vert)>0.6 ? Math.sign(vert) : 0);
-    if(now[14]||now[12]) dir = -1; else if(now[15]||now[13]) dir = 1;
+    // the stick/d-pad moves to the nearest button in that direction; holding repeats and speeds up
+    let dir = null;
+    if(now[12]) dir = 'up'; else if(now[13]) dir = 'down'; else if(now[14]) dir = 'left'; else if(now[15]) dir = 'right';
+    else if(Math.abs(vert) > 0.6 && Math.abs(vert) >= Math.abs(steer)) dir = vert < 0 ? 'up' : 'down';
+    else if(Math.abs(steer) > 0.6) dir = steer < 0 ? 'left' : 'right';
     const t = performance.now();
-    if(dir && dir !== menuHeldDir){ moveFocus(dir); menuHeldDir = dir; menuRepeatAt = t + 380; }
-    else if(dir && t >= menuRepeatAt){ moveFocus(dir); menuRepeatAt = t + 65; }
-    else if(!dir) menuHeldDir = 0;
+    if(dir && dir !== menuHeldDir){ navMove(dir); menuHeldDir = dir; menuHoldStart = t; menuRepeatAt = t + 300; }
+    else if(dir && t >= menuRepeatAt){ navMove(dir); const held = t - menuHoldStart; menuRepeatAt = t + (held > 1500 ? 30 : held > 800 ? 55 : 90); }
+    else if(!dir) menuHeldDir = null;
     const cur = focusables()[menuFocus];
+    const onMusic = !$('scrMusic').hidden;
     if(edge(0) && cur){ if(cur.tagName === 'INPUT') cur.focus(); else cur.click(); }
     if(edge(2) && cur && cur.classList.contains('lrow') && cur.dataset.r) libActivate(cur, true);
-    if(edge(3) && state==='pause') Music.next();
-    if(edge(4) && state==='pause') Music.prev();
+    if(onMusic){
+      if(edge(4)) libTabStep(-1);
+      if(edge(5)) libTabStep(1);
+      if(edge(6)) libPage(-1);
+      if(edge(7)) libPage(1);
+    } else {
+      if(edge(3) && state==='pause') Music.next();
+      if(edge(4) && state==='pause') Music.prev();
+    }
     if(edge(1)){
       if(!$('scrMusic').hidden){ if(!libBack()) $('btnMusicBack').click(); }
       else if(!$('scrPause').hidden) $('btnResume').click();
@@ -2110,17 +2122,86 @@ function readInput(){
   input.grab = tb.x ? 'indy' : tb.b ? 'method' : tb.lb ? 'tail' : tb.rb ? 'nose' : null;
   input.press = tb.lb ? 'tail' : tb.rb ? 'nose' : null;
 }
-let menuFocus = 0, menuHeldDir = 0, menuRepeatAt = 0;
+let menuFocus = 0, menuHeldDir = null, menuRepeatAt = 0, menuHoldStart = 0, menuEl = null;
 function focusables(){
   const scr = ['scrTitle','scrMusic','scrPick','scrPause','scrOver','scrOptions'].map($).find(s=>!s.hidden);
   return scr ? [...scr.querySelectorAll('button, input[type=text]')].filter(b => b.offsetParent!==null && b.tabIndex !== -1 && !b.disabled) : [];
 }
-function moveFocus(d){ const f = focusables(); if(!f.length) return; menuFocus = clamp(menuFocus + d, 0, f.length-1); focusMenu(); }
+const isRow = el => el && el.classList.contains('lrow') && el.dataset.r !== undefined;
+function setFocus(el){
+  const f = focusables(); const i = f.indexOf(el);
+  if(i < 0) return;
+  menuFocus = i; menuEl = el; focusMenu();
+}
+/* Directional focus: inside the song list up/down go row by row; everywhere else the nearest button
+   in the pushed direction wins (same row first for left/right, same column first for up/down). */
+function navMove(dir){
+  const f = focusables(); if(!f.length) return;
+  const cur = f[menuFocus];
+  if(!cur){ setFocus(f[0]); return; }
+  if(isRow(cur) && (dir === 'up' || dir === 'down')){
+    const rows = f.filter(isRow), i = rows.indexOf(cur), j = i + (dir === 'down' ? 1 : -1);
+    if(j >= 0 && j < rows.length){ setFocus(rows[j]); return; }
+  }
+  const list = $('libList'), lr = list.getBoundingClientRect();
+  const r = cur.getBoundingClientRect(), cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+  let best = null, bestScore = Infinity;
+  for(const el of f){
+    if(el === cur) continue;
+    const b = el.getBoundingClientRect();
+    if(isRow(el)){
+      if(isRow(cur)) continue;                                   // left/right never wander inside the list
+      if(b.bottom < lr.top || b.top > lr.bottom) continue;       // only rows you can see
+    }
+    const bx = (b.left + b.right) / 2, by = (b.top + b.bottom) / 2;
+    const gapX = Math.max(0, b.left - r.right, r.left - b.right), gapY = Math.max(0, b.top - r.bottom, r.top - b.bottom);
+    let along, across;
+    if(dir === 'down'){ if(by <= cy + 2) continue; along = by - cy; across = gapX; }
+    else if(dir === 'up'){ if(by >= cy - 2) continue; along = cy - by; across = gapX; }
+    else if(dir === 'right'){ if(bx <= cx + 2 || b.left < r.left) continue; along = bx - cx; across = gapY; }
+    else { if(bx >= cx - 2 || b.right > r.right) continue; along = cx - bx; across = gapY; }
+    const score = along + across * (dir === 'left' || dir === 'right' ? 12 : 3);
+    if(score < bestScore){ bestScore = score; best = el; }
+  }
+  if(best){
+    // coming into the list from above lands on the top visible row, from below on the bottom one
+    if(isRow(best) && !isRow(cur)){
+      const vis = f.filter(isRow).filter(el => { const b = el.getBoundingClientRect(); return b.bottom > lr.top + 2 && b.top < lr.bottom - 2; });
+      if(vis.length) best = dir === 'up' ? vis[vis.length - 1] : vis[0];
+    }
+    setFocus(best);
+  }
+}
+function moveFocus(d){ navMove(d < 0 ? 'up' : 'down'); }
+/* Music screen shortcuts: LB/RB switch tabs, LT/RT jump a page of songs */
+function libTabStep(d){
+  const tabs = [...document.querySelectorAll('#libTabs button')];
+  const i = tabs.findIndex(b => b.dataset.tab === Lib.tab);
+  const next = tabs[(i + d + tabs.length) % tabs.length];
+  const wasInList = isRow(focusables()[menuFocus]);
+  next.click();
+  const rows = focusables().filter(isRow);
+  setFocus(wasInList && rows.length ? rows[0] : next);
+  $('libList').scrollTop = 0;
+}
+function libPage(d){
+  const f = focusables(), rows = f.filter(isRow); if(!rows.length) return;
+  const cur = f[menuFocus], i = Math.max(0, rows.indexOf(cur));
+  const per = Math.max(3, Math.floor($('libList').clientHeight / (rows[0].offsetHeight + 2)) - 1);
+  setFocus(rows[clamp((isRow(cur) ? i : 0) + d * per, 0, rows.length - 1)]);
+}
 function focusMenu(keep){
   const f = focusables(); if(!f.length) return;
+  // after the list redraws, stay on the same row number (or the nearest one left)
+  if(menuEl && !menuEl.isConnected && keep && isRow(menuEl)){
+    const rows = f.filter(isRow), want = +menuEl.dataset.r;
+    const row = rows.find(el => +el.dataset.r === want) || rows[Math.min(want, rows.length - 1)];
+    if(row) menuFocus = f.indexOf(row);
+  } else if(menuEl && menuEl.isConnected && f.includes(menuEl)) menuFocus = f.indexOf(menuEl);
   menuFocus = clamp(menuFocus, 0, f.length-1);
   f.forEach((b,i)=>b.classList.toggle('focus', padActive && i===menuFocus));
   const el = f[menuFocus];
+  menuEl = el;
   if(padActive && el){
     if(el.tagName !== 'INPUT' || !keep) el.focus({preventScroll:true});
     el.scrollIntoView({ block:'nearest' });
@@ -2537,7 +2618,8 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 showScreen('scrTitle');
-window.__pp = { P, run, get state(){return state;}, get course(){return course;}, startRun, Music, Tricky, Opts };
+window.__pp = { P, run, get state(){return state;}, get course(){return course;}, startRun, Music, Tricky, Opts,
+  menu: { navMove, libTabStep, libPage, setLibrary, renderLib, pad(on){ padActive = on; }, get focused(){ return focusables()[menuFocus]; }, get tab(){ return Lib.tab; } } };
 })();
 </script>
 

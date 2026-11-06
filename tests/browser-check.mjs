@@ -103,5 +103,39 @@ for (const [mode, button, viewport] of [
   if(before !== 'true' || after !== 'false' || !/OFF/.test(label) || problems.length) failed = true;
   await page.close();
 }
+// Menu navigation with a controller: the music screen opens on the songs, up/down walk the list,
+// LT/RT jump a page, LB/RB switch tabs, and up from the list reaches the search box and tabs
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const problems = [];
+  page.on('pageerror', e => problems.push('PAGE ERROR: ' + (e.stack || e.message)));
+  await page.goto(base); await page.waitForTimeout(2000);
+  const r = await page.evaluate(async () => {
+    const m = window.__pp.menu, wait = ms => new Promise(r => setTimeout(r, ms));
+    const songs = Array.from({ length: 300 }, (_, i) => ({ k: 'k' + i, t: 'Song ' + String(i).padStart(3, '0'), a: 'Artist ' + (i % 12), l: 'Album ' + (i % 30), g: i % 2 ? 'Rock' : 'Jazz', y: 1990 + (i % 30), n: i % 12 + 1 }));
+    m.setLibrary(songs, 'nas');
+    m.pad(true);
+    document.getElementById('btnMusic').click(); await wait(300);
+    const label = el => !el ? 'nothing' : el.classList.contains('lrow') ? 'row ' + el.dataset.r : (el.id || el.dataset.tab || el.textContent.trim().slice(0, 20));
+    const out = { start: label(m.focused) };
+    m.navMove('down'); m.navMove('down'); out.down2 = label(m.focused);
+    m.libPage(1); out.page = label(m.focused);
+    m.libPage(-1); m.libPage(-1); out.pageBack = label(m.focused);
+    m.navMove('up'); out.upOut = label(m.focused);
+    m.navMove('up'); out.up2 = label(m.focused);
+    m.navMove('right'); out.right = label(m.focused);
+    m.navMove('down'); m.navMove('down'); out.backDown = label(m.focused);
+    m.libTabStep(1); out.tab = m.tab + ' / ' + label(m.focused);
+    m.navMove('down'); out.tabRow = label(m.focused);
+    return out;
+  });
+  await page.screenshot({ path: 'tests/shots/music-nav.png' });
+  console.log('== menu nav: ' + JSON.stringify(r));
+  problems.forEach(p => console.log('   ' + p.split('\n').slice(0,6).join('\n      ')));
+  const ok = r.start === 'row 0' && r.down2 === 'row 2' && r.page.startsWith('row ') && +r.page.slice(4) > 4 && r.pageBack === 'row 0'
+    && r.upOut === 'libSearch' && r.tab.startsWith('artists') && r.tabRow === 'row 1' && !problems.length;
+  if(!ok) failed = true;
+  await page.close();
+}
 await browser.close();
 console.log(failed ? 'RESULT: PROBLEMS FOUND' : 'RESULT: ALL MODES RUN');
