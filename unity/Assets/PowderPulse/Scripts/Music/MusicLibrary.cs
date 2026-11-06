@@ -19,6 +19,7 @@ namespace PowderPulse.Music
         public int Track;
         public double Duration;
         public bool Usb;
+        public bool Convert;          // FLAC/M4A: turned into WAV just before it plays
 #if ENABLE_WINMD_SUPPORT
         public StorageFile File;      // USB song on Xbox: copied to the app's cache before playing
 #endif
@@ -35,6 +36,24 @@ namespace PowderPulse.Music
         // Unity can decode these everywhere; FLAC/M4A/WMA are skipped for now
         static readonly string[] Playable = { ".mp3", ".ogg", ".wav", ".aif", ".aiff" };
         static readonly string[] AudioExt = { ".mp3", ".ogg", ".wav", ".aif", ".aiff", ".m4a", ".aac", ".flac", ".wma", ".opus" };
+        // these get converted to WAV with the system's own decoder (Apple's afconvert on the Mac, Windows' MediaTranscoder on Xbox)
+        static readonly string[] Convertible = { ".flac", ".m4a", ".aac", ".alac" };
+
+        public static bool CanConvert =>
+#if ENABLE_WINMD_SUPPORT || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
+            true;
+#else
+            false;
+#endif
+
+        static bool Accept(string ext, out bool convert)
+        {
+            convert = false;
+            if (Playable.Contains(ext)) return true;
+            if (CanConvert && Convertible.Contains(ext)) { convert = true; return true; }
+            Skipped++;
+            return false;
+        }
         static readonly Regex AllSongs = new Regex(@"^(all\s*(music|songs|tracks|audio)|songs|tracks)$", RegexOptions.IgnoreCase);
         static readonly Regex MusicRoot = new Regex(@"music|audio", RegexOptions.IgnoreCase);
         static readonly Regex NotMusic = new Regex(@"photo|picture|image|video|movie|film|tv|recording|playlist", RegexOptions.IgnoreCase);
@@ -138,11 +157,25 @@ namespace PowderPulse.Music
             foreach (var o in items)
             {
                 if (o.Kind != "audio" || string.IsNullOrEmpty(o.Url) || !seen.Add(o.Url)) continue;
-                string ext = ExtForMime(o.Mime);
-                if (ext == "") ext = Path.GetExtension(new Uri(o.Url).AbsolutePath).ToLowerInvariant();
-                if (!Playable.Contains(ext)) { Skipped++; continue; }
-                found.Add(new Song { Title = o.Title, Artist = o.Artist, Album = o.Album, Genre = o.Genre, Track = o.Track, Duration = o.Duration, Url = o.Url, Ext = ext });
+                string url = o.Url, ext = ExtOf(o.Mime, o.Url);
+                if (!Playable.Contains(ext))
+                {   // many servers also offer a ready-to-play copy (MP3 or WAV) of FLAC/M4A files: use it when there is one
+                    foreach (var r in o.Res)
+                    {
+                        string e2 = ExtOf(r.Value, r.Key);
+                        if (Playable.Contains(e2)) { url = r.Key; ext = e2; break; }
+                    }
+                }
+                if (!Accept(ext, out bool convert)) continue;
+                found.Add(new Song { Title = o.Title, Artist = o.Artist, Album = o.Album, Genre = o.Genre, Track = o.Track, Duration = o.Duration, Url = url, Ext = ext, Convert = convert });
             }
+        }
+
+        static string ExtOf(string mime, string url)
+        {
+            string ext = ExtForMime(mime);
+            if (ext != "") return ext;
+            try { return Path.GetExtension(new Uri(url).AbsolutePath).ToLowerInvariant(); } catch { return ""; }
         }
 
         // ---------- USB ----------
@@ -163,8 +196,8 @@ namespace PowderPulse.Music
                         foreach (var f in files)
                         {
                             string ext = (f.FileType ?? "").ToLowerInvariant();
-                            if (!Playable.Contains(ext)) { Skipped++; continue; }
-                            var song = new Song { Title = f.DisplayName, Ext = ext, Usb = true, File = f };
+                            if (!Accept(ext, out bool convert)) continue;
+                            var song = new Song { Title = f.DisplayName, Ext = ext, Usb = true, File = f, Convert = convert };
                             try
                             {
                                 var p = await f.Properties.GetMusicPropertiesAsync();
@@ -226,12 +259,12 @@ namespace PowderPulse.Music
                     if (name.StartsWith(".")) continue;
                     string ext = Path.GetExtension(f).ToLowerInvariant();
                     if (!AudioExt.Contains(ext)) continue;
-                    if (!Playable.Contains(ext)) { Skipped++; continue; }
+                    if (!Accept(ext, out bool convert)) continue;
                     // Artist/Album/01 Title.mp3 is the usual layout
                     var album = Path.GetFileName(Path.GetDirectoryName(f));
                     var artist = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(f)));
                     var title = Regex.Replace(Path.GetFileNameWithoutExtension(f), @"^\d{1,3}[\s._-]+", "");
-                    found.Add(new Song { Title = title, Album = album, Artist = depth >= 2 ? artist : null, Url = new Uri(f).AbsoluteUri, Ext = ext, Usb = true });
+                    found.Add(new Song { Title = title, Album = album, Artist = depth >= 2 ? artist : null, Url = new Uri(f).AbsoluteUri, Ext = ext, Usb = true, Convert = convert });
                 }
                 foreach (var d in Directory.GetDirectories(dir))
                     if (!Path.GetFileName(d).StartsWith(".")) Walk(d, depth + 1, found, until);
@@ -253,6 +286,85 @@ namespace PowderPulse.Music
 #endif
             await Task.Yield();
             return s.Url;
+        }
+
+        /// <summary>
+        /// Turns a FLAC/M4A song into a WAV in the cache and returns its file URL.
+        /// NAS songs are downloaded first; the WAV is deleted again once the song is done (ForgetCopy).
+        /// </summary>
+        public static async Task<string> ConvertToWav(Song s, string url)
+        {
+            string cache = Application.temporaryCachePath, id = Guid.NewGuid().ToString("N");
+            string src, wav = Path.Combine(cache, "song-" + id + ".wav");
+            bool tempSrc = false;
+            if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                src = Path.Combine(cache, "src-" + id + s.Ext); tempSrc = true;
+                using (var r = new UnityWebRequest(url, "GET"))
+                {
+                    r.downloadHandler = new DownloadHandlerFile(src) { removeFileOnAbort = true };
+                    r.timeout = 180;
+                    await Dlna.Send(r);
+                    if (r.result != UnityWebRequest.Result.Success) throw new Exception("download failed: " + r.error);
+                }
+            }
+            else
+            {
+                src = new Uri(url).LocalPath;
+                tempSrc = src.StartsWith(cache);          // a USB copy made for playing
+            }
+            try
+            {
+#if ENABLE_WINMD_SUPPORT
+                var srcFile = await StorageFile.GetFileFromPathAsync(src);
+                var folder = await StorageFolder.GetFolderFromPathAsync(cache);
+                var dstFile = await folder.CreateFileAsync(Path.GetFileName(wav), CreationCollisionOption.ReplaceExisting);
+                var transcoder = new Windows.Media.Transcoding.MediaTranscoder();
+                var profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateWav(Windows.Media.MediaProperties.AudioEncodingQuality.High);
+                var prep = await transcoder.PrepareFileTranscodeAsync(srcFile, dstFile, profile);
+                if (!prep.CanTranscode) throw new Exception("Windows can't convert it: " + prep.FailureReason);
+                await prep.TranscodeAsync();
+#elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
+                await Task.Run(() =>
+                {
+                    var psi = new System.Diagnostics.ProcessStartInfo("/usr/bin/afconvert", $"-f WAVE -d LEI16@44100 \"{src}\" \"{wav}\"")
+                    { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
+                    using (var p = System.Diagnostics.Process.Start(psi))
+                    {
+                        string err = p.StandardError.ReadToEnd();
+                        if (!p.WaitForExit(120000)) { try { p.Kill(); } catch { } throw new Exception("conversion took too long"); }
+                        if (p.ExitCode != 0) throw new Exception("afconvert: " + err.Trim());
+                    }
+                });
+#else
+                await Task.Yield();
+                throw new Exception("this platform can't convert " + s.Ext);
+#endif
+            }
+            catch
+            {
+                try { File.Delete(wav); } catch { }
+                throw;
+            }
+            finally
+            {
+                if (tempSrc) { try { File.Delete(src); } catch { } }
+            }
+            return new Uri(wav).AbsoluteUri;
+        }
+
+        /// <summary>Removes converted songs and USB copies left over from an earlier session.</summary>
+        public static void CleanCache()
+        {
+            try
+            {
+                foreach (var f in Directory.GetFiles(Application.temporaryCachePath))
+                {
+                    var n = Path.GetFileName(f);
+                    if (n.StartsWith("song-") || n.StartsWith("src-") || n.StartsWith("usb-song")) File.Delete(f);
+                }
+            }
+            catch { }
         }
 
         /// <summary>Deletes copies of USB songs made for playing (Xbox only).</summary>

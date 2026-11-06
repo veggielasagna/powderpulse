@@ -69,6 +69,7 @@ namespace PowderPulse.Music
             rev.reverbPreset = AudioReverbPreset.User;
             rev.dryLevel = 0f; rev.room = -800f; rev.roomHF = -1200f; rev.decayTime = 2.4f; rev.reflectionsLevel = -1400f;
             rev.reverbLevel = -10000f; rev.diffusion = 100f; rev.density = 100f;
+            MusicLibrary.CleanCache();
             demo = DemoLoop.Make();
             PlayDemo();
         }
@@ -110,7 +111,7 @@ namespace PowderPulse.Music
         }
 
         string Summary() =>
-            $"{NasCount + UsbCount:N0} songs ready" + (MusicLibrary.Skipped > 0 ? $" · {MusicLibrary.Skipped:N0} skipped (FLAC/M4A not supported yet)" : "");
+            $"{NasCount + UsbCount:N0} songs ready" + (MusicLibrary.Skipped > 0 ? $" · {MusicLibrary.Skipped:N0} skipped (format not supported)" : "");
 
         void SetLibrary(List<Song> songs)
         {
@@ -198,7 +199,13 @@ namespace PowderPulse.Music
             try
             {
                 url = await MusicLibrary.PlayableUrl(s);
-                using (var r = UnityWebRequestMultimedia.GetAudioClip(url, MusicLibrary.TypeFor(s.Ext)))
+                if (s.Convert)
+                {
+                    var t0 = Time.realtimeSinceStartup;
+                    url = await MusicLibrary.ConvertToWav(s, url);
+                    Debug.Log($"Converted {s.Label} ({s.Ext}) in {Time.realtimeSinceStartup - t0:0.0}s");
+                }
+                using (var r = UnityWebRequestMultimedia.GetAudioClip(url, s.Convert ? AudioType.WAV : MusicLibrary.TypeFor(s.Ext)))
                 {
                     var dh = (DownloadHandlerAudioClip)r.downloadHandler;
                     dh.streamAudio = false;

@@ -23,6 +23,7 @@ namespace PowderPulse.Music
         public string Id, Title, Kind, Artist, Album, Genre, Date, Url, Mime;
         public int Track;
         public double Duration;
+        public List<KeyValuePair<string, string>> Res = new List<KeyValuePair<string, string>>();   // every audio copy: url, mime
     }
 
     /// <summary>
@@ -202,8 +203,9 @@ namespace PowderPulse.Music
                     foreach (var res in el.Elements().Where(x => x.Name.LocalName == "res"))
                     {
                         string mime = MimeOf((string)res.Attribute("protocolInfo") ?? "");
-                        if (mime.StartsWith("image/")) continue;
-                        main = res; e.Mime = mime; break;
+                        if (mime.StartsWith("image/") || string.IsNullOrWhiteSpace(res.Value)) continue;
+                        e.Res.Add(new KeyValuePair<string, string>(res.Value.Trim(), mime));
+                        if (main == null) { main = res; e.Mime = mime; }
                     }
                     if (main != null)
                     {
