@@ -33,8 +33,19 @@ Cel-shaded street-style snowboarding roguelite for Xbox Series X (Dev Mode first
 - Controls: X/B/LB/RB are one set of trick buttons: snowboard grabs (Indy/Method/Tail/Nose) in the air, LB/RB presses and butters on the snow; snowskate flips (Kickflip/Heelflip/Shove-it/Tre). Stick up/down = flips (snowboard air) or manuals (snowskate ground).
 - Performance: adaptive resolution (`adaptResolution`), crystals updated only near the rider (`flakeWindow`), audio automation only when a target moves (`Music.set`).
 
+## Unity version (unity/)
+- Unity 6.3 LTS (6000.3.28f1), URP, Input System only. The owner's working copy is `~/PowderPulse` on the Mac; this folder is the GitHub copy. Keep both in sync (scripts are written here and copied to the Mac; Unity-generated `.meta` files come back from the Mac).
+- Everything is built from code at Play: `Boot` (RuntimeInitializeOnLoadMethod) adds `Game` to whatever scene is open. No scene editing needed.
+- Scripts: `World` (endless Free Ride mountain, same recipe as the web `genCourse`, `Ground(x,z)`), `Rider` (physics + trick scoring ported from the web `step()`/`land()`; +x is right in Unity, so steering is not inverted), `RiderModel` (rider from primitives, posed per frame; stand-in for a rigged character), `TerrainStreamer` (64 m chunks, 1 m grid, trees, kicker lips), `SnowFx`, `Game` (look/light/post, camera always directly behind, OnGUI HUD and pause/music menu).
+- Shaders in `Resources/` (so builds include them): `Toon` (two-tone, cast shadows, rim, inverted-hull outline in the SRPDefaultUnlit pass, ShadowCaster/DepthOnly/DepthNormals), `Sky`, `SnowFx`.
+- Music (`Scripts/Music`): `Dlna` (SSDP over UdpClient + ContentDirectory over UnityWebRequest, port of Services/Dlna.cs), `MusicLibrary` (same NAS crawl rules as the Xbox app; USB = KnownFolders.RemovableDevices on Xbox, /Volumes on the Mac skipping network shares, 10 s budget), `MusicPlayer` (prefetches the next song, shuffle in `PlayerPrefs pp_shuffle`, demo loop synthesized at start, ride reactions ported from the web `Music.update`; `BassShelf` is an OnAudioFilterRead low shelf and must live on a GameObject without an AudioListener).
+- Only mp3/ogg/wav/aiff play (Unity decodes those everywhere); FLAC/M4A are counted as skipped. On the owner's NAS: 9,264 playable, 3,995 skipped.
+- Mac editor needs macOS "Local Network" permission for Unity to find the NAS.
+- `Editor/XboxBuild.cs`: `ProjectSetup` ([InitializeOnLoad]) allows plain-http downloads and sets the UWP capabilities; `XboxBuild.Build` is the GameCI build method (D3D, IL2CPP, honours -customBuildPath).
+- Xbox build: `.github/workflows/unity-xbox.yml` (GameCI unity-builder on windows-2022, then the manifest is patched: identity PowderPulse.Unity / CN=PowderPulse, music file types for removableStorage; msbuild Master x64 sideload). Needs secrets UNITY_EMAIL, UNITY_PASSWORD, UNITY_LICENSE (contents of the Mac's Unity_lic.ulf); without them it stops with a warning. Not yet run end to end.
+
 ## Build
-Push to `main` → `.github/workflows/build.yml` on windows-2022 → artifact `Powder-Pulse-1.0.<run>.0-install` (sideload .msix + dependency .appx files + HOW-TO-INSTALL.txt). Same pipeline as WMC SX. Nothing compiles locally; CI is the compile check.
+Web version: push to `main` (outside `unity/`) → `.github/workflows/build.yml` on windows-2022 → artifact `Powder-Pulse-1.0.<run>.0-install` (sideload .msix + dependency .appx files + HOW-TO-INSTALL.txt). Same pipeline as WMC SX. Nothing compiles locally; CI is the compile check.
 
 ## Next
 - Nothing queued.

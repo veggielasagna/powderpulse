@@ -3,6 +3,7 @@ name: Build Powder Pulse
 on:
   push:
     branches: [ main ]
+    paths-ignore: [ 'unity/**', '.github/workflows/unity-xbox.yml' ]
   workflow_dispatch:
 
 jobs:

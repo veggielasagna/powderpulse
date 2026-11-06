@@ -1,0 +1,148 @@
+name: Unity Xbox build
+
+# Builds the Unity version (unity/) into an Xbox Dev Mode package.
+# Needs three repository secrets (Settings > Secrets and variables > Actions):
+#   UNITY_EMAIL, UNITY_PASSWORD  - the Unity account
+#   UNITY_LICENSE                - contents of /Library/Application Support/Unity/Unity_lic.ulf on the Mac
+# Without them the run stops early with a note instead of failing.
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'unity/**', '.github/workflows/unity-xbox.yml' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    env:
+      HAS_LICENSE: ${{ secrets.UNITY_LICENSE != '' && secrets.UNITY_EMAIL != '' && secrets.UNITY_PASSWORD != '' }}
+    steps:
+      - name: Waiting for the Unity secrets
+        if: env.HAS_LICENSE != 'true'
+        shell: pwsh
+        run: |
+          Write-Host "::warning::Add UNITY_EMAIL, UNITY_PASSWORD and UNITY_LICENSE under Settings > Secrets and variables > Actions, then run this workflow again."
+
+      - name: Get the code
+        if: env.HAS_LICENSE == 'true'
+        uses: actions/checkout@v4
+
+      - name: Reuse Unity's import cache
+        if: env.HAS_LICENSE == 'true'
+        uses: actions/cache@v4
+        with:
+          path: unity/Library
+          key: Library-WSAPlayer-${{ hashFiles('unity/Packages/packages-lock.json', 'unity/ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: Library-WSAPlayer-
+
+      - name: Export the Xbox (UWP) project from Unity
+        if: env.HAS_LICENSE == 'true'
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity
+          unityVersion: auto
+          targetPlatform: WSAPlayer
+          buildMethod: PowderPulse.EditorTools.XboxBuild.Build
+          buildName: PowderPulse
+          versioning: None
+          allowDirtyBuild: true
+
+      - name: Set up MSBuild
+        if: env.HAS_LICENSE == 'true'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Stamp the version, capabilities and signing identity
+        if: env.HAS_LICENSE == 'true'
+        shell: pwsh
+        run: |
+          $manifest = Get-ChildItem build -Recurse -Filter Package.appxmanifest | Where-Object { $_.FullName -notmatch '\\bin\\|\\obj\\' } | Select-Object -First 1
+          if (-not $manifest) { Get-ChildItem build -Recurse -Depth 3 | Format-Table FullName; throw "Unity didn't produce a UWP project" }
+          Write-Host "Manifest: $($manifest.FullName)"
+          $version = "1.1.${{ github.run_number }}.0"
+          [xml]$x = Get-Content $manifest.FullName -Raw
+          $ns = New-Object Xml.XmlNamespaceManager $x.NameTable
+          $ns.AddNamespace("m", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
+          $ns.AddNamespace("uap", "http://schemas.microsoft.com/appx/manifest/uap/windows10")
+          $id = $x.SelectSingleNode("//m:Identity", $ns)
+          $id.SetAttribute("Name", "PowderPulse.Unity")
+          $id.SetAttribute("Publisher", "CN=PowderPulse")
+          $id.SetAttribute("Version", $version)
+          # USB drives need a file type declaration next to the removableStorage capability
+          $app = $x.SelectSingleNode("//m:Application", $ns)
+          $ext = $app.SelectSingleNode("m:Extensions", $ns)
+          if (-not $ext) { $ext = $x.CreateElement("Extensions", "http://schemas.microsoft.com/appx/manifest/foundation/windows10"); [void]$app.AppendChild($ext) }
+          if (-not $x.SelectSingleNode("//uap:FileTypeAssociation", $ns)) {
+            $u = "http://schemas.microsoft.com/appx/manifest/uap/windows10"
+            $e = $x.CreateElement("uap", "Extension", $u); $e.SetAttribute("Category", "windows.fileTypeAssociation")
+            $f = $x.CreateElement("uap", "FileTypeAssociation", $u); $f.SetAttribute("Name", "music")
+            $types = $x.CreateElement("uap", "SupportedFileTypes", $u)
+            foreach ($t in ".mp3", ".ogg", ".wav", ".aif", ".aiff", ".m4a", ".flac") { $ft = $x.CreateElement("uap", "FileType", $u); $ft.InnerText = $t; [void]$types.AppendChild($ft) }
+            [void]$f.AppendChild($types); [void]$e.AppendChild($f); [void]$ext.AppendChild($e)
+          }
+          $x.Save($manifest.FullName)
+          "APP_VERSION=$version" >> $env:GITHUB_ENV
+          "UWP_DIR=$($manifest.DirectoryName)" >> $env:GITHUB_ENV
+          Get-Content $manifest.FullName | Select-String -Pattern "Identity|Capability|FileType" | ForEach-Object { Write-Host $_ }
+
+      - name: Create a signing certificate
+        if: env.HAS_LICENSE == 'true'
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=PowderPulse" -KeyUsage DigitalSignature -FriendlyName "Powder Pulse" `
+            -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $password = ConvertTo-SecureString -String "powderpulse" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "$env:RUNNER_TEMP\PowderPulse_Signing.pfx" -Password $password | Out-Null
+
+      - name: Compile and package for Xbox
+        if: env.HAS_LICENSE == 'true'
+        shell: pwsh
+        run: |
+          $sln = Get-ChildItem build -Recurse -Filter *.sln | Select-Object -First 1
+          if (-not $sln) { throw "No Visual Studio solution in the Unity export" }
+          $proj = Get-ChildItem $env:UWP_DIR -Filter *.vcxproj | Select-Object -First 1
+          if (-not $proj) { $proj = Get-ChildItem $env:UWP_DIR -Filter *.csproj | Select-Object -First 1 }
+          Write-Host "Solution: $($sln.FullName)  App project: $($proj.FullName)"
+          msbuild $sln.FullName -t:Restore -p:Configuration=Master -p:Platform=x64 -verbosity:minimal
+          msbuild $sln.FullName `
+            -p:Configuration=Master -p:Platform=x64 `
+            -p:AppxBundle=Never -p:UapAppxPackageBuildMode=SideloadOnly -p:GenerateAppxPackageOnBuild=true `
+            -p:AppxPackageDir="${{ github.workspace }}\out\\" `
+            -p:AppxPackageSigningEnabled=true -p:PackageCertificateKeyFile="$env:RUNNER_TEMP\PowderPulse_Signing.pfx" -p:PackageCertificatePassword=powderpulse `
+            -m -verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { throw "msbuild failed" }
+
+      - name: Gather the files to install
+        if: env.HAS_LICENSE == 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path install | Out-Null
+          $pkg = Get-ChildItem out -Recurse -Include *.msix, *.appx | Where-Object { $_.FullName -notmatch '\\Dependencies\\' } | Select-Object -First 1
+          if (-not $pkg) { Get-ChildItem out -Recurse | Format-Table FullName; throw "No app package was produced" }
+          Copy-Item $pkg.FullName install\
+          Get-ChildItem out -Recurse -Include *.appx, *.msix | Where-Object { $_.FullName -match '\\Dependencies\\x64\\' -and $_.Name -notmatch 'Desktop' } | ForEach-Object { Copy-Item $_.FullName install\ }
+          @"
+          Powder Pulse (Unity) $env:APP_VERSION
+
+          Install on your Xbox (Dev Mode):
+          1. On a computer, open the Xbox Device Portal (the https://<xbox-ip>:11443 address shown in Dev Home).
+          2. On the Home page, choose Add.
+          3. Pick $($pkg.Name) as the app package and choose Next.
+          4. Tick "I want to specify optional packages", add every .appx file in this folder one at a time, and choose Start.
+          5. In Dev Home, highlight Powder Pulse, press the View button, choose View details, and set App type to Game.
+
+          This installs next to the web version of Powder Pulse; it doesn't replace it.
+          "@ | Set-Content install\HOW-TO-INSTALL.txt
+          Get-ChildItem install | Format-Table Name, Length
+
+      - name: Upload the install files
+        if: env.HAS_LICENSE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Powder-Pulse-Unity-${{ env.APP_VERSION }}-install
+          path: install/
+          if-no-files-found: error
